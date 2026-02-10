@@ -1,0 +1,5 @@
+{
+  "name": "LingoLeap - AI Language Tutor",
+  "description": "An interactive language learning assistant that integrates vocabulary tracking, level-appropriate dialogue generation, and native text-to-speech for immersive practice.",
+  "requestFramePermissions": []
+}
