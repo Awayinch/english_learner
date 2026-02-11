@@ -1,16 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { BookPlus, Loader2 } from 'lucide-react';
+import { ListPlus } from 'lucide-react';
 import { Settings, VocabularyItem } from '../types';
-import { defineSelection } from '../services/geminiService';
 
 interface TextSelectionTooltipProps {
   settings: Settings;
   onAddVocabulary: (item: VocabularyItem) => void;
+  onAddToQueue: (word: string) => void;
 }
 
-const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ settings, onAddVocabulary }) => {
+const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ settings, onAddToQueue }) => {
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const handleSelection = () => {
@@ -37,24 +36,13 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ settings, o
     return () => document.removeEventListener('mouseup', handleSelection);
   }, []);
 
-  const handleAddToVocab = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!selection) return;
-
-    setIsLoading(true);
-    try {
-        const item = await defineSelection(selection.text, settings);
-        if (item) {
-            onAddVocabulary(item);
-            setSelection(null); // Close tooltip
-            window.getSelection()?.removeAllRanges(); // Clear selection
-        }
-    } catch (error) {
-        console.error("Failed to add vocab", error);
-        alert("Could not define word. Check connection.");
-    } finally {
-        setIsLoading(false);
-    }
+  const handleQueue = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!selection) return;
+      
+      onAddToQueue(selection.text);
+      setSelection(null);
+      window.getSelection()?.removeAllRanges();
   };
 
   if (!selection) return null;
@@ -69,16 +57,11 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ settings, o
         {selection.text}
       </span>
       <button
-        onClick={handleAddToVocab}
-        disabled={isLoading}
+        onClick={handleQueue}
         className="flex items-center gap-1 hover:text-indigo-300 text-xs font-medium transition-colors whitespace-nowrap"
       >
-        {isLoading ? (
-            <Loader2 size={14} className="animate-spin" />
-        ) : (
-            <BookPlus size={14} />
-        )}
-        Add to Worldbook
+        <ListPlus size={14} />
+        Add to Queue
       </button>
       
       {/* Arrow */}

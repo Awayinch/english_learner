@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X, Square } from 'lucide-react';
+import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X, Square, ListPlus, CheckCircle } from 'lucide-react';
 import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings } from './types';
 import VocabularyPanel from './components/VocabularyPanel';
 import ChatMessage from './components/ChatMessage';
@@ -25,14 +25,14 @@ function App() {
         level: EnglishLevel.B1,
         voiceName: '', 
         useEdgeTTS: true, // Default to true for better experience
-        systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
+        systemPersona: "你是一位引人入胜、乐于助人的英语导师。你解释清晰且充满耐心。",
         userPersona: "",
         longTermMemory: "", 
         baseUrl: "",
         apiKey: "", 
         selectedModel: "gemini-3-flash-preview",
-        vocabularyModel: "gemini-2.0-flash", // Default fast model
-        initialGreeting: "Hello! I'm your English tutor. I've updated my Worldbook. What would you like to talk about today?"
+        vocabularyModel: "gemini-1.5-flash", // Default fast model
+        initialGreeting: "你好！我是你的英语导师。我已经更新了世界书。今天想聊点什么？"
     };
   });
 
@@ -93,12 +93,16 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
+  // Pending Queue State (New)
+  const [pendingWords, setPendingWords] = useState<string[]>([]);
+  const [queueNotification, setQueueNotification] = useState<string | null>(null);
+
   // Abort Controller for stopping generation
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Tap-to-Define State
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [isDefining, setIsDefining] = useState(false);
+  const [isDefining, setIsDefining] = useState(false); // Kept for legacy single define if needed, though now using queue
   
   // Update welcome message if settings change (only if it's the only message)
   useEffect(() => {
@@ -125,6 +129,11 @@ function App() {
     setErrorMsg(msg);
     setTimeout(() => setErrorMsg(null), 4000);
   };
+  
+  const showQueueToast = (msg: string) => {
+      setQueueNotification(msg);
+      setTimeout(() => setQueueNotification(null), 2000);
+  }
 
   const handleDeleteMessage = (id: string) => {
     setMessages(prev => prev.filter(m => m.id !== id));
@@ -133,6 +142,16 @@ function App() {
   const handleAddGlobalVocab = (item: VocabularyItem) => {
       setVocabulary(prev => [...prev, item]);
   };
+  
+  const handleAddToQueue = (word: string) => {
+      if (!word) return;
+      if (pendingWords.includes(word)) {
+          showQueueToast("Already in queue");
+          return;
+      }
+      setPendingWords(prev => [...prev, word]);
+      showQueueToast("Added to Pending Queue");
+  }
 
   const handleUpdateSettings = (newSettings: Settings | ((prev: Settings) => Settings)) => {
       setSettings(newSettings);
@@ -143,22 +162,10 @@ function App() {
       setSelectedWord(word);
   };
 
-  const handleConfirmDefinition = async () => {
+  const handleConfirmAddToQueue = () => {
       if (!selectedWord) return;
-      setIsDefining(true);
-      try {
-          const item = await defineSelection(selectedWord, settings);
-          if (item) {
-              handleAddGlobalVocab(item);
-              setSelectedWord(null); // Close modal on success
-          } else {
-              showError("Could not define word.");
-          }
-      } catch (e) {
-          showError("Definition failed. Check settings.");
-      } finally {
-          setIsDefining(false);
-      }
+      handleAddToQueue(selectedWord);
+      setSelectedWord(null);
   };
 
   const handleStopGeneration = () => {
@@ -268,7 +275,11 @@ function App() {
     <div className="flex h-full relative bg-slate-50 overflow-hidden">
       
       {/* Global Text Selection Tooltip (Desktop Mouse Selection) */}
-      <TextSelectionTooltip settings={settings} onAddVocabulary={handleAddGlobalVocab} />
+      <TextSelectionTooltip 
+        settings={settings} 
+        onAddVocabulary={handleAddGlobalVocab} 
+        onAddToQueue={handleAddToQueue}
+      />
 
       {/* Tap-to-Define Bottom Sheet/Modal (Mobile/Tablet Friendly) */}
       {selectedWord && (
@@ -283,7 +294,7 @@ function App() {
               <div className="bg-white w-full sm:w-96 p-5 rounded-t-2xl sm:rounded-2xl shadow-2xl transform transition-transform animate-in slide-in-from-bottom-4 pointer-events-auto mb-0 sm:mb-10 mx-4 flex flex-col gap-4">
                   <div className="flex justify-between items-start">
                       <div>
-                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Define Word</p>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Selected Word</p>
                           <h3 className="text-2xl font-bold text-slate-800 break-all">"{selectedWord}"</h3>
                       </div>
                       <button 
@@ -302,17 +313,16 @@ function App() {
                           <Volume2 size={18} /> Read
                       </button>
                       <button 
-                          onClick={handleConfirmDefinition}
-                          disabled={isDefining}
-                          className="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-70"
+                          onClick={handleConfirmAddToQueue}
+                          className="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md"
                       >
-                          {isDefining ? <Loader2 size={18} className="animate-spin" /> : <BookPlus size={18} />}
-                          Add to Worldbook
+                          <ListPlus size={18} />
+                          Add to Queue
                       </button>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-slate-400">
-                        Using fast model: <span className="font-mono text-indigo-400">{settings.vocabularyModel || 'gemini-2.0-flash'}</span>
+                        Will be added to Pending Queue for batch processing.
                     </p>
                   </div>
               </div>
@@ -324,6 +334,12 @@ function App() {
             <AlertCircle size={18} className="shrink-0" />
             {errorMsg}
         </div>
+      )}
+      
+      {queueNotification && (
+         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-full shadow-xl z-50 flex items-center gap-2 text-sm font-medium animate-in fade-in zoom-in-95">
+            <CheckCircle size={16} className="text-green-400"/> {queueNotification}
+         </div>
       )}
 
       {/* Mobile Backdrop for Sidebar */}
@@ -344,6 +360,8 @@ function App() {
         settings={settings}
         setSettings={handleUpdateSettings} // Pass setter to update memory
         messages={messages} // Pass messages for sync summary
+        pendingWords={pendingWords}
+        setPendingWords={setPendingWords}
       />
 
       <SettingsModal 
@@ -366,9 +384,12 @@ function App() {
           <div className="flex items-center gap-2 md:gap-3 overflow-hidden">
             <button 
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors relative"
             >
                 <Menu size={20} />
+                {pendingWords.length > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-indigo-500 rounded-full border border-white"></span>
+                )}
             </button>
             <div className="flex items-center gap-2 min-w-0">
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shrink-0">

@@ -6,7 +6,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.6"; // Must match metadata.json
+const APP_VERSION = "1.0.7"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -129,8 +129,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           setTestMessage(`Success! Found ${models.length} models via ${source}. (Key: ${maskedKey})`);
           
           if (!settings.selectedModel || !models.includes(settings.selectedModel)) {
-             const preferred = models.find(m => m.includes('gemini-2.0-flash')) || 
-                               models.find(m => m.includes('gemini-1.5-flash')) || 
+             const preferred = models.find(m => m.includes('gemini-1.5-flash')) || 
+                               models.find(m => m.includes('gemini-3-flash')) || 
                                models[0];
              if (preferred) {
                  handleChange('selectedModel', preferred);
@@ -287,7 +287,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               next.apiKey = bSettings.apiKey || next.apiKey;
               next.baseUrl = bSettings.baseUrl || next.baseUrl;
               next.selectedModel = bSettings.selectedModel || next.selectedModel;
-              next.vocabularyModel = bSettings.vocabularyModel || next.vocabularyModel || "gemini-2.0-flash";
+              next.vocabularyModel = bSettings.vocabularyModel || next.vocabularyModel || "gemini-1.5-flash";
               next.summaryApiKey = bSettings.summaryApiKey || next.summaryApiKey;
               next.summaryBaseUrl = bSettings.summaryBaseUrl || next.summaryBaseUrl;
               next.summaryModel = bSettings.summaryModel || next.summaryModel;
@@ -568,13 +568,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <label className="block text-xs font-semibold text-slate-500 mb-1">Vocabulary/Tool Model (Fast)</label>
                         <div className="relative">
                             <select 
-                                value={settings.vocabularyModel || "gemini-2.0-flash"} 
+                                value={settings.vocabularyModel || "gemini-1.5-flash"} 
                                 onChange={(e) => handleChange('vocabularyModel', e.target.value)} 
                                 className="w-full p-2 rounded border border-slate-300 text-sm bg-white"
                             >
-                                <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended)</option>
                                 <option value="gemini-1.5-flash">gemini-1.5-flash</option>
                                 <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                                 {availableModels.map(m => <option key={`vocab-${m}`} value={m}>{m}</option>)}
                             </select>
                             <p className="text-[10px] text-slate-400 mt-1">Used for Tap-to-Define and Import to ensure speed.</p>

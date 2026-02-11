@@ -1,8 +1,7 @@
-
 import React, { useState, useRef } from 'react';
 import { VocabularyItem, EnglishLevel, Settings, ChatMessage } from '../types';
-import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, NotebookPen, Save, Search, Server } from 'lucide-react';
-import { processVocabularyFromText, generateObsidianSummary } from '../services/geminiService';
+import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, NotebookPen, Save, Search, Server, ListPlus, Play } from 'lucide-react';
+import { processVocabularyFromText, generateObsidianSummary, defineVocabularyBatch } from '../services/geminiService';
 import { syncToGithub } from '../services/githubService';
 
 interface VocabularyPanelProps {
@@ -16,6 +15,8 @@ interface VocabularyPanelProps {
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
   messages: ChatMessage[]; 
   className?: string;
+  pendingWords: string[];
+  setPendingWords: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
@@ -28,7 +29,9 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   settings,
   setSettings,
   messages,
-  className = ""
+  className = "",
+  pendingWords,
+  setPendingWords
 }) => {
   // Tab State: 'words' or 'memory'
   const [activeTab, setActiveTab] = useState<'words' | 'memory'>('words');
@@ -79,6 +82,10 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const handleDelete = (id: string) => {
     setVocabulary(vocabulary.filter(v => v.id !== id));
   };
+  
+  const handleRemovePending = (word: string) => {
+      setPendingWords(prev => prev.filter(w => w !== word));
+  }
 
   const handleStopProcessing = () => {
     if (abortControllerRef.current) {
@@ -120,6 +127,45 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     }
   };
 
+  // --- Process Pending Queue ---
+  const handleProcessPending = async () => {
+      if (pendingWords.length === 0) return;
+      if (!settings.apiKey && !process.env.API_KEY) {
+        alert("Please configure your API Key in Settings first.");
+        return;
+      }
+
+      setIsProcessing(true);
+      setStatusLog(["🚀 Processing Pending Queue...", `📡 Using: ${settings.baseUrl ? 'Proxy' : 'Official API'}`]);
+      
+      abortControllerRef.current = new AbortController();
+      
+      try {
+          // Batch processing
+          const items = await defineVocabularyBatch(pendingWords, settings, abortControllerRef.current.signal);
+          if (items.length > 0) {
+              setVocabulary(prev => [...prev, ...items]);
+              setStatusLog(prev => [...prev, `✅ Added ${items.length} words.`]);
+              setPendingWords([]); // Clear queue on success
+          } else {
+              setStatusLog(prev => [...prev, `⚠️ No valid definitions found.`]);
+          }
+      } catch (err: any) {
+          if (!err.message.includes('Aborted')) {
+             setStatusLog(prev => [...prev, `❌ Error: ${err.message}`]);
+          }
+      } finally {
+          setIsProcessing(false);
+          abortControllerRef.current = null;
+          // Auto switch to import mode if we want to show logs, or just stay here?
+          // Let's assume we show logs via an inline area if needed, 
+          // or if success, we just clear and show toast. 
+          // For now, if we have statusLogs and finished, maybe clear them after delay
+          setTimeout(() => setStatusLog([]), 4000);
+      }
+  };
+
+  // --- Process Text Block Import ---
   const handleAiProcess = async () => {
     if (!importText.trim()) return;
     
@@ -224,7 +270,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 shrink-0">
           <button 
              onClick={() => setActiveTab('words')}
              className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'words' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
@@ -258,7 +304,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       ) : (
           /* WORDS TAB CONTENT */
           <>
-            <div className="p-4 border-b border-slate-100 bg-slate-50">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                     Target Level
                 </label>
@@ -272,6 +318,54 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     ))}
                 </select>
             </div>
+
+            {/* PENDING QUEUE SECTION */}
+            {pendingWords.length > 0 && !isImportMode && (
+                <div className="p-4 bg-indigo-50 border-b border-indigo-100 shrink-0">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-xs font-bold text-indigo-800 flex items-center gap-2 uppercase tracking-wide">
+                           <ListPlus size={14} /> Pending Query Queue ({pendingWords.length})
+                        </h3>
+                        {isProcessing && <Loader2 size={14} className="animate-spin text-indigo-600"/>}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-3 max-h-24 overflow-y-auto">
+                        {pendingWords.map(word => (
+                            <span key={word} className="inline-flex items-center gap-1 bg-white border border-indigo-200 text-indigo-700 px-2 py-1 rounded text-xs font-medium">
+                                {word}
+                                <button onClick={() => handleRemovePending(word)} className="text-indigo-300 hover:text-red-500"><X size={12}/></button>
+                            </span>
+                        ))}
+                    </div>
+                    
+                    {isProcessing && (
+                         <div className="w-full bg-indigo-200 rounded-full h-1.5 mb-2 overflow-hidden">
+                            <div className="bg-indigo-600 h-full w-full animate-pulse"></div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2">
+                         <button 
+                            onClick={() => setPendingWords([])}
+                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-500 rounded text-xs font-medium hover:text-red-600 hover:border-red-200"
+                            disabled={isProcessing}
+                        >
+                            Clear
+                        </button>
+                        <button 
+                            onClick={handleProcessPending}
+                            className="flex-1 px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center justify-center gap-2"
+                            disabled={isProcessing}
+                        >
+                           {isProcessing ? 'Processing...' : 'Start Batch Query'} <Play size={10} fill="currentColor"/>
+                        </button>
+                    </div>
+                    {statusLog.length > 0 && isProcessing && (
+                         <div className="mt-2 text-[10px] text-indigo-600 font-mono">
+                            {statusLog[statusLog.length - 1]}
+                         </div>
+                    )}
+                </div>
+            )}
 
             {isImportMode ? (
                 <div className="flex-1 p-4 flex flex-col gap-3 bg-slate-50">
@@ -344,39 +438,41 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     )}
                 </div>
             ) : (
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-sm font-semibold text-slate-700">Vocabulary List</h3>
-                        <div className="flex gap-1">
-                            <button onClick={() => setIsImportMode(true)} title="AI Import" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                                <Upload size={16} />
-                            </button>
-                            <button onClick={handleExport} title="Export JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                                <Download size={16} />
-                            </button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-0">
+                    <div className="sticky top-0 bg-slate-50 pt-4 pb-2 z-10">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-sm font-semibold text-slate-700">Vocabulary List</h3>
+                            <div className="flex gap-1">
+                                <button onClick={() => setIsImportMode(true)} title="AI Import" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                    <Upload size={16} />
+                                </button>
+                                <button onClick={handleExport} title="Export JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                    <Download size={16} />
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    
-                    {/* Search Input */}
-                    <div className="relative mb-2">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search size={14} className="text-slate-400" />
+                        
+                        {/* Search Input (Sticky Context) */}
+                        <div className="relative shadow-sm rounded-lg">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search size={14} className="text-slate-400" />
+                            </div>
+                            <input 
+                                type="text"
+                                placeholder="Search words..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none bg-white transition-colors"
+                            />
+                            {searchQuery && (
+                                <button 
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
                         </div>
-                        <input 
-                            type="text"
-                            placeholder="Search words..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none bg-slate-50 focus:bg-white transition-colors"
-                        />
-                        {searchQuery && (
-                            <button 
-                                onClick={() => setSearchQuery('')}
-                                className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
                     </div>
                     
                     {vocabulary.length === 0 && (

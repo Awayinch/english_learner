@@ -146,11 +146,11 @@ export const getAvailableModels = async (settings: Settings): Promise<string[]> 
                   if (name) models.add(name);
               });
           }
-          if (models.size === 0) return ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-3-flash-preview"];
+          if (models.size === 0) return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-3-flash-preview"];
           return Array.from(models).sort();
       } catch (e: any) {
-          // Fallback list if SDK fails but no proxy
-           return ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-3-flash-preview"];
+          // Fallback list
+           return ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-3-flash-preview"];
       }
   }
 };
@@ -171,30 +171,27 @@ export const generateChatResponse = async (
   
   const vocabListString = vocabulary.map((v) => `${v.word} (${v.definition})`).join(", ");
   
-  // Inject Long Term Memory into System Prompt
   const memoryContext = settings.longTermMemory && settings.longTermMemory.trim().length > 0 
-    ? `\n[LONG TERM MEMORY / USER NOTES]:\n${settings.longTermMemory}\n(Use these notes to maintain context and personalize the conversation.)\n`
+    ? `\n[长期记忆/用户笔记]:\n${settings.longTermMemory}\n(使用这些笔记来保持上下文并个性化对话。)\n`
     : "";
 
   const systemInstructionText = `
-    ${settings.systemPersona || "You are an engaging, helpful English language tutor."}
-    Target Proficiency Level: ${settings.level}
+    ${settings.systemPersona || "你是一位引人入胜、乐于助人的英语导师。"}
+    目标英语水平: ${settings.level}
     
     ${memoryContext}
     
-    VOCABULARY WORLDBOOK (Shared Memory): [${vocabListString}].
-    INSTRUCTIONS:
-    1. Converse naturally.
-    2. Incorporate Worldbook words if contextually appropriate.
-    3. **CRITICAL**: Output valid JSON.
-    OUTPUT SCHEMA: Array of [{ "text": "...", "usedVocabulary": [{ "word": "...", "translation": "..." }] }]
+    单词本 (共享记忆): [${vocabListString}].
+    指令:
+    1. 自然地进行对话。
+    2. 如果语境合适，请结合单词本中的单词。
+    3. **关键**: 输出有效的 JSON。
+    输出格式: Array of [{ "text": "...", "usedVocabulary": [{ "word": "...", "translation": "..." }] }]
   `;
 
   const modelName = settings.selectedModel || "gemini-3-flash-preview";
 
-  // STRICT ROUTING
   if (settings.baseUrl) {
-      // --- PROXY MODE (OpenAI Compatible) ---
       const messages = [
           { role: 'system', content: systemInstructionText },
           ...history.map(h => ({
@@ -209,7 +206,6 @@ export const generateChatResponse = async (
       return Array.isArray(parsed) ? parsed : [parsed];
 
   } else {
-      // --- OFFICIAL SDK MODE ---
       if (signal?.aborted) throw new Error("Aborted");
       
       const ai = createClient(settings.apiKey, undefined);
@@ -240,7 +236,6 @@ export const generateChatResponse = async (
         }
       };
       
-      // Check cancel before request
       if (signal?.aborted) throw new Error("Aborted");
       
       const response = await ai.models.generateContent({
@@ -266,21 +261,15 @@ export const parseQuizFromText = async (
     fileData: { data: string, mimeType: string } | null,
     settings: Settings
 ): Promise<QuizQuestion[]> => {
-    // Note: Quiz also uses the selected chat model usually, or we can use the vocab model. 
-    // Let's stick to selectedModel for Quiz as it requires reasoning.
     const modelName = settings.selectedModel || "gemini-3-flash-preview";
-    const prompt = `Analyze content. Generate Quiz for ${settings.level}. Output JSON: Array of {question, options[4], correctAnswerIndex(0-3), explanation(zh-CN)}. Context: "${rawText.substring(0, 1500)}"`;
+    const prompt = `分析内容。为 ${settings.level} 生成测验。输出 JSON：Array of {question, options[4], correctAnswerIndex(0-3), explanation(zh-CN)}。上下文: "${rawText.substring(0, 1500)}"`;
 
     if (settings.baseUrl) {
-        // PROXY MODE (Text only for now, ignoring fileData to ensure compatibility with most text-based proxies)
-        // If user provided a file, we might be limited by the proxy's vision capabilities.
-        // For robustness, we send the prompt text.
         const messages = [{ role: 'user', content: prompt }];
         const textResult = await generateContentOpenAICompat(settings, modelName, messages, true);
         const parsed = extractJson(textResult);
         return parsed.map((item: any) => ({ ...item, id: Date.now().toString() + Math.random().toString().substr(2, 5) }));
     } else {
-        // OFFICIAL SDK MODE
         const ai = createClient(settings.apiKey, undefined);
         const parts: any[] = [{ text: prompt }];
         if (fileData) parts.push({ inlineData: { mimeType: fileData.mimeType, data: fileData.data } });
@@ -295,21 +284,16 @@ export const parseQuizFromText = async (
     }
 };
 
-// --- Definition ---
+// --- Single Definition (Keep for manual use if needed) ---
 export const defineSelection = async (text: string, settings: Settings): Promise<VocabularyItem | null> => {
-    // OPTIMIZATION: Use the user-configured Vocabulary Model (defaulting to gemini-2.0-flash)
-    const TOOL_MODEL = settings.vocabularyModel || "gemini-2.0-flash"; 
-    
-    // Short, precise prompt to save tokens and time
-    const prompt = `Define "${text}". JSON: { "word": "${text}", "definition": "Concise CN def", "partOfSpeech": "noun/verb..." }`;
+    const TOOL_MODEL = settings.vocabularyModel || "gemini-1.5-flash"; 
+    const prompt = `定义 "${text}"。JSON格式: { "word": "${text}", "definition": "简明的中文定义", "partOfSpeech": "noun/verb..." }`;
 
     try {
         let resText = "";
         if (settings.baseUrl) {
-            // PROXY
             resText = await generateContentOpenAICompat(settings, TOOL_MODEL, [{ role: 'user', content: prompt }], true);
         } else {
-            // SDK
             const ai = createClient(settings.apiKey, undefined);
             const response = await ai.models.generateContent({
                 model: TOOL_MODEL,
@@ -328,24 +312,51 @@ export const defineSelection = async (text: string, settings: Settings): Promise
     }
 }
 
-// --- Vocabulary Extraction ---
-export const processVocabularyFromText = async (
-    rawText: string, 
+// --- Batch Definition (New for Queue) ---
+export const defineVocabularyBatch = async (
+    words: string[],
     settings: Settings,
     signal?: AbortSignal
 ): Promise<VocabularyItem[]> => {
-    // Use Vocabulary Model for Import as well to be faster
-    const modelName = settings.vocabularyModel || "gemini-2.0-flash";
-    const prompt = `Extract difficult vocab. Output JSON Array: [{ "word": "...", "definition": "CN def", "partOfSpeech": "..." }]. Text: "${rawText.substring(0, 4000)}"`;
+    if (words.length === 0) return [];
+    
+    // Use Vocabulary Model (defaulting to 1.5 flash now)
+    const modelName = settings.vocabularyModel || "gemini-1.5-flash";
+    const prompt = `严格定义这些单词。输出 JSON 数组: [{ "word": "...", "definition": "简明的中文定义", "partOfSpeech": "..." }]. 单词: ${words.join(", ")}`;
 
     if (settings.baseUrl) {
         // PROXY
-        if (signal?.aborted) throw new Error("Aborted");
         const resText = await generateContentOpenAICompat(settings, modelName, [{ role: 'user', content: prompt }], true, undefined, undefined, signal);
         const items = extractJson(resText);
         return Array.isArray(items) ? items.map((item: any) => ({ ...item, id: Date.now().toString() + Math.random().toString().substr(2, 5) })) : [];
     } else {
         // SDK
+        const ai = createClient(settings.apiKey, undefined);
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: [{ parts: [{ text: prompt }] }],
+            config: { responseMimeType: "application/json" }
+        });
+        const items = extractJson(response.text || "[]");
+        return Array.isArray(items) ? items.map((item: any) => ({ ...item, id: Date.now().toString() + Math.random().toString().substr(2, 5) })) : [];
+    }
+};
+
+// --- Vocabulary Extraction (From Text Block) ---
+export const processVocabularyFromText = async (
+    rawText: string, 
+    settings: Settings,
+    signal?: AbortSignal
+): Promise<VocabularyItem[]> => {
+    const modelName = settings.vocabularyModel || "gemini-1.5-flash";
+    const prompt = `提取生僻词汇。输出 JSON 数组: [{ "word": "...", "definition": "中文定义", "partOfSpeech": "..." }]. 文本: "${rawText.substring(0, 4000)}"`;
+
+    if (settings.baseUrl) {
+        if (signal?.aborted) throw new Error("Aborted");
+        const resText = await generateContentOpenAICompat(settings, modelName, [{ role: 'user', content: prompt }], true, undefined, undefined, signal);
+        const items = extractJson(resText);
+        return Array.isArray(items) ? items.map((item: any) => ({ ...item, id: Date.now().toString() + Math.random().toString().substr(2, 5) })) : [];
+    } else {
         const ai = createClient(settings.apiKey, undefined);
         if (signal?.aborted) throw new Error("Aborted");
         const response = await ai.models.generateContent({
@@ -364,7 +375,6 @@ export const generateObsidianSummary = async (
   vocabulary: VocabularyItem[],
   settings: Settings
 ): Promise<string> => {
-  // Determine effective config
   const effectiveApiKey = settings.summaryApiKey || settings.apiKey;
   const effectiveBaseUrl = settings.summaryBaseUrl || settings.baseUrl;
   const effectiveModel = settings.summaryModel || settings.selectedModel || "gemini-3-flash-preview";
@@ -376,40 +386,36 @@ export const generateObsidianSummary = async (
     .join("\n\n");
 
   const prompt = `
-  Task: Summarize English learning session for Obsidian Daily Note (Markdown).
-  Reqs: 
-  1. Wrap key topics in [[WikiLinks]].
-  2. Link vocabulary like [[Vocabulary/Word]].
-  3. Sections: ## Summary, ## Vocabulary.
-  4. Tags: #english/learning.
+  任务：为 Obsidian Daily Note (Markdown) 总结英语学习会话。
+  要求: 
+  1. 将关键主题包裹在 [[WikiLinks]] 中。
+  2. 链接词汇，如 [[Vocabulary/Word]]。
+  3. 章节: ## Summary, ## Vocabulary.
+  4. 标签: #english/learning.
   
-  [Vocabulary]
+  [词汇]
   ${vocabText}
   
-  [History]
+  [历史记录]
   ${conversationText}
   
-  Output raw Markdown only.
+  仅输出原始 Markdown。
   `;
 
-  // STRICT ROUTING FOR SUMMARY
   if (effectiveBaseUrl) {
-      // PROXY MODE
       console.log(`[Summary] Using Proxy: ${effectiveBaseUrl}`);
-      // Note: We pass jsonMode=false because we want Markdown
       const messages = [{ role: 'user', content: prompt }];
       return await generateContentOpenAICompat(
           settings, 
           effectiveModel, 
           messages, 
-          false, // Not JSON mode
+          false, 
           effectiveBaseUrl,
           effectiveApiKey
       );
   } else {
-      // OFFICIAL SDK MODE
       console.log(`[Summary] Using Google SDK`);
-      const ai = createClient(effectiveApiKey, undefined); // Ignore baseurl in SDK
+      const ai = createClient(effectiveApiKey, undefined); 
       try {
           const response = await ai.models.generateContent({
             model: effectiveModel,
