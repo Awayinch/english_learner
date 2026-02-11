@@ -358,7 +358,6 @@ function App() {
         level={settings.level}
         setLevel={(l) => handleUpdateSettings(prev => ({...prev, level: l}))}
         settings={settings}
-        setSettings={handleUpdateSettings} // Pass setter to update memory
         messages={messages} // Pass messages for sync summary
         pendingWords={pendingWords}
         setPendingWords={setPendingWords}
