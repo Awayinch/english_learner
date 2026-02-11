@@ -1,6 +1,7 @@
+
 import React, { useState, useRef } from 'react';
 import { VocabularyItem, EnglishLevel, Settings, ChatMessage } from '../types';
-import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, NotebookPen, Save } from 'lucide-react';
+import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, NotebookPen, Save, Search, Server } from 'lucide-react';
 import { processVocabularyFromText, generateObsidianSummary } from '../services/geminiService';
 import { syncToGithub } from '../services/githubService';
 
@@ -32,6 +33,9 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   // Tab State: 'words' or 'memory'
   const [activeTab, setActiveTab] = useState<'words' | 'memory'>('words');
 
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [newWord, setNewWord] = useState('');
   const [newDef, setNewDef] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -50,6 +54,12 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Filter Logic
+  const filteredVocabulary = vocabulary.filter(item => 
+    item.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    item.definition.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleAddWord = () => {
     if (newWord && newDef) {
@@ -119,7 +129,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     }
 
     setIsProcessing(true);
-    setStatusLog(["🚀 Starting batch processing..."]);
+    setStatusLog(["🚀 Starting batch processing...", `📡 Using: ${settings.baseUrl ? 'Proxy/Custom URL' : 'Official Google API'}`]);
     
     const lines = importText.split('\n').filter(l => l.trim().length > 0);
     const BATCH_SIZE = 15; 
@@ -138,6 +148,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
             setStatusLog(prev => [...prev, `⏳ Processing batch ${batchIndex}/${totalBatches}...`]);
             
             try {
+                // This function respects settings.baseUrl (Proxy) internally
                 const items = await processVocabularyFromText(chunk, settings, abortControllerRef.current.signal);
                 if (items.length > 0) {
                     setVocabulary(prev => [...prev, ...items]);
@@ -307,7 +318,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         </div>
                     ) : (
                         <>
-                            <p className="text-xs text-slate-500">Paste any text. We'll split it into batches and extract vocab.</p>
+                            <div className="text-xs text-slate-500 space-y-1">
+                                <p>Paste any text. We'll split it into batches and extract vocab.</p>
+                                <p className="text-indigo-600 flex items-center gap-1">
+                                    <Server size={10} /> 
+                                    Uses: {settings.baseUrl ? 'Custom Proxy (Configured)' : 'Official Google API'}
+                                </p>
+                            </div>
                             <textarea
                                 className="flex-1 w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 outline-none text-sm resize-none"
                                 placeholder="e.g. Paste a full article here..."
@@ -340,13 +357,41 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         </div>
                     </div>
                     
+                    {/* Search Input */}
+                    <div className="relative mb-2">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search size={14} className="text-slate-400" />
+                        </div>
+                        <input 
+                            type="text"
+                            placeholder="Search words..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none bg-slate-50 focus:bg-white transition-colors"
+                        />
+                        {searchQuery && (
+                            <button 
+                                onClick={() => setSearchQuery('')}
+                                className="absolute inset-y-0 right-0 pr-2 flex items-center text-slate-400 hover:text-slate-600"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+                    
                     {vocabulary.length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-sm">
                             No words yet. Try AI Import!
                         </div>
                     )}
+                    
+                    {vocabulary.length > 0 && filteredVocabulary.length === 0 && (
+                        <div className="text-center py-8 text-slate-400 text-sm">
+                            No matching words found.
+                        </div>
+                    )}
 
-                    {vocabulary.map((item) => (
+                    {filteredVocabulary.map((item) => (
                     <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 group hover:border-indigo-300 transition-colors relative">
                         <div className="flex justify-between items-start">
                         <div>
