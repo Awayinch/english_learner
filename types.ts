@@ -1,3 +1,4 @@
+
 export interface VocabularyItem {
   id: string;
   word: string;
@@ -10,7 +11,8 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   text: string;
-  usedVocabulary?: string[]; 
+  // Updated to store the contextual translation provided by AI
+  usedVocabulary?: { word: string; translation: string }[]; 
   isPlaying?: boolean; 
 }
 
@@ -28,10 +30,21 @@ export interface Settings {
   voiceName: string; 
   systemPersona: string;
   userPersona: string;
+  longTermMemory?: string; // New: Persistent memory notes
   baseUrl: string;
   apiKey: string; 
   selectedModel: string; 
   initialGreeting: string; 
+  
+  // GitHub Sync Settings
+  githubToken?: string;
+  githubRepo?: string; // e.g., "username/my-obsidian-vault"
+  githubPath?: string; // e.g., "English/" or ""
+  
+  // Summary Specific AI Settings (Optional)
+  summaryApiKey?: string;
+  summaryBaseUrl?: string;
+  summaryModel?: string;
 }
 
 export interface QuizQuestion {

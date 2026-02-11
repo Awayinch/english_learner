@@ -1,7 +1,8 @@
 import React, { useState, useRef } from 'react';
-import { VocabularyItem, EnglishLevel, Settings } from '../types';
-import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, CheckCircle } from 'lucide-react';
-import { processVocabularyFromText } from '../services/geminiService';
+import { VocabularyItem, EnglishLevel, Settings, ChatMessage } from '../types';
+import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, NotebookPen, Save } from 'lucide-react';
+import { processVocabularyFromText, generateObsidianSummary } from '../services/geminiService';
+import { syncToGithub } from '../services/githubService';
 
 interface VocabularyPanelProps {
   vocabulary: VocabularyItem[];
@@ -11,7 +12,9 @@ interface VocabularyPanelProps {
   isOpen: boolean;
   onClose: () => void;
   settings: Settings;
-  className?: string; // Allow passing extra classes
+  setSettings: React.Dispatch<React.SetStateAction<Settings>>;
+  messages: ChatMessage[]; 
+  className?: string;
 }
 
 const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
@@ -22,8 +25,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   isOpen,
   onClose,
   settings,
+  setSettings,
+  messages,
   className = ""
 }) => {
+  // Tab State: 'words' or 'memory'
+  const [activeTab, setActiveTab] = useState<'words' | 'memory'>('words');
+
   const [newWord, setNewWord] = useState('');
   const [newDef, setNewDef] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -32,6 +40,11 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const [importText, setImportText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImportMode, setIsImportMode] = useState(false);
+  
+  // Sync State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [syncMsg, setSyncMsg] = useState('');
   
   // Progress State
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -66,6 +79,37 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     }
   };
 
+  const handleSyncToGithub = async () => {
+    if (!settings.githubToken || !settings.githubRepo) {
+        setSyncStatus('error');
+        setSyncMsg("Setup GitHub in Settings first.");
+        setTimeout(() => setSyncStatus('idle'), 3000);
+        return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus('idle');
+    try {
+        const history = messages.map(m => ({ role: m.role, text: m.text }));
+        const markdown = await generateObsidianSummary(history, vocabulary, settings);
+        
+        const dateStr = new Date().toISOString().split('T')[0];
+        const contentWithHeader = `\n---\n## Session: ${new Date().toLocaleTimeString()}\n\n${markdown}\n`;
+        
+        const filename = `${dateStr}.md`; 
+        await syncToGithub(settings, filename, contentWithHeader);
+
+        setSyncStatus('success');
+        setSyncMsg("Synced to Obsidian!");
+    } catch (e: any) {
+        setSyncStatus('error');
+        setSyncMsg(e.message || "Sync failed");
+    } finally {
+        setIsSyncing(false);
+        setTimeout(() => setSyncStatus('idle'), 5000);
+    }
+  };
+
   const handleAiProcess = async () => {
     if (!importText.trim()) return;
     
@@ -77,9 +121,8 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     setIsProcessing(true);
     setStatusLog(["🚀 Starting batch processing..."]);
     
-    // Create chunks based on newlines or approx words (simple split by newline for now)
     const lines = importText.split('\n').filter(l => l.trim().length > 0);
-    const BATCH_SIZE = 15; // Process 15 lines/sentences at a time to avoid context limits
+    const BATCH_SIZE = 15; 
     const totalBatches = Math.ceil(lines.length / BATCH_SIZE);
     
     setProgress({ current: 0, total: totalBatches });
@@ -105,7 +148,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                 }
             } catch (err: any) {
                 if (err.message.includes('cancelled') || err.message.includes('Aborted')) {
-                    throw err; // Re-throw to exit main loop
+                    throw err; 
                 }
                 setStatusLog(prev => [...prev, `❌ Batch ${batchIndex} Error: ${err.message}`]);
             }
@@ -117,7 +160,6 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
         setImportText('');
     } catch (e: any) {
         if (e.message.includes('cancelled') || e.message.includes('Aborted')) {
-             // Already logged
         } else {
              setStatusLog(prev => [...prev, `❌ System Error: ${e.message}`]);
         }
@@ -145,170 +187,224 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     >
       <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white">
         <h2 className="font-semibold text-lg flex items-center gap-2">
-          <BookOpen size={20} />
-          Worldbook
+          {activeTab === 'words' ? <BookOpen size={20} /> : <NotebookPen size={20} />}
+          {activeTab === 'words' ? 'Worldbook' : 'Memory Pad'}
         </h2>
-        <button onClick={onClose} className="hover:bg-indigo-500 p-1 rounded">
-          <X size={20} />
-        </button>
+        <div className="flex gap-2">
+            <button 
+                onClick={handleSyncToGithub} 
+                className={`p-1 rounded hover:bg-indigo-500 transition-colors relative ${!settings.githubToken ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title="Sync to Obsidian (GitHub)"
+                disabled={isSyncing || !settings.githubToken}
+            >
+                {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <Cloud size={20} />}
+            </button>
+            <button onClick={onClose} className="hover:bg-indigo-500 p-1 rounded">
+                <X size={20} />
+            </button>
+        </div>
       </div>
 
-      <div className="p-4 border-b border-slate-100 bg-slate-50">
-        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-            Target Level
-        </label>
-        <select 
-            value={level} 
-            onChange={(e) => setLevel(e.target.value as EnglishLevel)}
-            className="w-full p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-        >
-            {Object.values(EnglishLevel).map((lvl) => (
-                <option key={lvl} value={lvl}>{lvl}</option>
-            ))}
-        </select>
+      {syncStatus !== 'idle' && (
+          <div className={`text-xs px-4 py-2 font-medium flex items-center gap-2 ${syncStatus === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {syncStatus === 'success' ? <CheckCircle size={14}/> : <AlertCircle size={14}/>}
+              {syncMsg}
+          </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200">
+          <button 
+             onClick={() => setActiveTab('words')}
+             className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'words' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+              Words
+          </button>
+          <button 
+             onClick={() => setActiveTab('memory')}
+             className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'memory' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+              Memory Notes
+          </button>
       </div>
 
-      {isImportMode ? (
-        <div className="flex-1 p-4 flex flex-col gap-3 bg-slate-50">
-            <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-slate-700 flex items-center gap-2">
-                    <Sparkles size={16} className="text-indigo-600"/> 
-                    AI Smart Import
-                </h3>
-                <button 
-                    onClick={() => setIsImportMode(false)}
-                    disabled={isProcessing}
-                    className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50"
+      {activeTab === 'memory' ? (
+          <div className="flex-1 p-4 bg-slate-50 flex flex-col">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800 flex items-start gap-2">
+                  <Sparkles size={14} className="mt-0.5 shrink-0" />
+                  <p>Content here is <strong>automatically injected</strong> into the AI's system prompt. Use it to store your background, learning goals, or previous conversation topics.</p>
+              </div>
+              <textarea 
+                  className="flex-1 w-full p-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none resize-none text-sm font-mono leading-relaxed shadow-inner"
+                  placeholder="e.g. I am 25 years old. I work as a software engineer. My goal is to improve business English..."
+                  value={settings.longTermMemory || ''}
+                  onChange={(e) => setSettings(prev => ({ ...prev, longTermMemory: e.target.value }))}
+              />
+              <div className="mt-2 text-xs text-slate-400 text-right flex items-center justify-end gap-1">
+                  <Save size={12} /> Auto-saved locally
+              </div>
+          </div>
+      ) : (
+          /* WORDS TAB CONTENT */
+          <>
+            <div className="p-4 border-b border-slate-100 bg-slate-50">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                    Target Level
+                </label>
+                <select 
+                    value={level} 
+                    onChange={(e) => setLevel(e.target.value as EnglishLevel)}
+                    className="w-full p-2 rounded border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                 >
-                    Back to List
-                </button>
+                    {Object.values(EnglishLevel).map((lvl) => (
+                        <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                </select>
             </div>
-            
-            {isProcessing ? (
-                <div className="flex-1 flex flex-col gap-4">
-                     <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
-                        <div className="flex justify-between text-xs font-bold text-slate-600 mb-2">
-                            <span>Progress</span>
-                            <span>{progress.current} / {progress.total} batches</span>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2 mb-4">
-                            <div 
-                                className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                                style={{ width: `${(progress.current / Math.max(progress.total, 1)) * 100}%` }}
-                            ></div>
-                        </div>
+
+            {isImportMode ? (
+                <div className="flex-1 p-4 flex flex-col gap-3 bg-slate-50">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+                            <Sparkles size={16} className="text-indigo-600"/> 
+                            AI Smart Import
+                        </h3>
                         <button 
-                            onClick={handleStopProcessing}
-                            className="w-full py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 flex items-center justify-center gap-2"
+                            onClick={() => setIsImportMode(false)}
+                            disabled={isProcessing}
+                            className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50"
                         >
-                            <StopCircle size={16} /> Stop Import
-                        </button>
-                     </div>
-                     <div className="flex-1 bg-black/80 rounded-lg p-3 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
-                        {statusLog.map((log, i) => (
-                            <div key={i}>{log}</div>
-                        ))}
-                        <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
-                     </div>
-                </div>
-            ) : (
-                <>
-                    <p className="text-xs text-slate-500">Paste any text. We'll split it into batches and extract vocab.</p>
-                    <textarea
-                        className="flex-1 w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 outline-none text-sm resize-none"
-                        placeholder="e.g. Paste a full article here..."
-                        value={importText}
-                        onChange={(e) => setImportText(e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={handleAiProcess}
-                            disabled={!importText.trim()}
-                            className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium flex justify-center items-center gap-2"
-                        >
-                            <Sparkles size={16} /> Start Processing
+                            Back to List
                         </button>
                     </div>
-                </>
-            )}
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-semibold text-slate-700">Vocabulary List</h3>
-                <div className="flex gap-1">
-                    <button onClick={() => setIsImportMode(true)} title="AI Import" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                        <Upload size={16} />
-                    </button>
-                    <button onClick={handleExport} title="Export JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
-                        <Download size={16} />
-                    </button>
+                    
+                    {isProcessing ? (
+                        <div className="flex-1 flex flex-col gap-4">
+                            <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
+                                <div className="flex justify-between text-xs font-bold text-slate-600 mb-2">
+                                    <span>Progress</span>
+                                    <span>{progress.current} / {progress.total} batches</span>
+                                </div>
+                                <div className="w-full bg-slate-200 rounded-full h-2 mb-4">
+                                    <div 
+                                        className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${(progress.current / Math.max(progress.total, 1)) * 100}%` }}
+                                    ></div>
+                                </div>
+                                <button 
+                                    onClick={handleStopProcessing}
+                                    className="w-full py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 flex items-center justify-center gap-2"
+                                >
+                                    <StopCircle size={16} /> Stop Import
+                                </button>
+                            </div>
+                            <div className="flex-1 bg-black/80 rounded-lg p-3 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+                                {statusLog.map((log, i) => (
+                                    <div key={i}>{log}</div>
+                                ))}
+                                <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <p className="text-xs text-slate-500">Paste any text. We'll split it into batches and extract vocab.</p>
+                            <textarea
+                                className="flex-1 w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 outline-none text-sm resize-none"
+                                placeholder="e.g. Paste a full article here..."
+                                value={importText}
+                                onChange={(e) => setImportText(e.target.value)}
+                            />
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={handleAiProcess}
+                                    disabled={!importText.trim()}
+                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium flex justify-center items-center gap-2"
+                                >
+                                    <Sparkles size={16} /> Start Processing
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
-            </div>
-            
-            {vocabulary.length === 0 && (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                    No words yet. Try AI Import!
-                </div>
-            )}
-
-            {vocabulary.map((item) => (
-            <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 group hover:border-indigo-300 transition-colors relative">
-                <div className="flex justify-between items-start">
-                <div>
-                    <p className="font-bold text-slate-800">{item.word}</p>
-                    <p className="text-xs text-slate-500 italic">{item.partOfSpeech}</p>
-                </div>
-                <button 
-                    onClick={() => handleDelete(item.id)}
-                    className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
-                >
-                    <Trash2 size={16} />
-                </button>
-                </div>
-                <p className="text-sm text-slate-600 mt-1">{item.definition}</p>
-            </div>
-            ))}
-
-            {isAdding ? (
-            <div className="bg-white p-3 rounded-lg border-2 border-indigo-100 animate-in fade-in slide-in-from-bottom-2">
-                <input
-                autoFocus
-                className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-medium"
-                placeholder="Word"
-                value={newWord}
-                onChange={(e) => setNewWord(e.target.value)}
-                />
-                <input
-                className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm"
-                placeholder="Definition"
-                value={newDef}
-                onChange={(e) => setNewDef(e.target.value)}
-                />
-                <div className="flex gap-2 justify-end mt-2">
-                    <button 
-                        onClick={() => setIsAdding(false)}
-                        className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={handleAddWord}
-                        className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                    >
-                        Add
-                    </button>
-                </div>
-            </div>
             ) : (
-                <button 
-                    onClick={() => setIsAdding(true)}
-                    className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-indigo-400 hover:text-indigo-600 flex items-center justify-center gap-2 text-sm transition-all"
-                >
-                    <Plus size={16} /> Add Manually
-                </button>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <h3 className="text-sm font-semibold text-slate-700">Vocabulary List</h3>
+                        <div className="flex gap-1">
+                            <button onClick={() => setIsImportMode(true)} title="AI Import" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                <Upload size={16} />
+                            </button>
+                            <button onClick={handleExport} title="Export JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                <Download size={16} />
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {vocabulary.length === 0 && (
+                        <div className="text-center py-8 text-slate-400 text-sm">
+                            No words yet. Try AI Import!
+                        </div>
+                    )}
+
+                    {vocabulary.map((item) => (
+                    <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 group hover:border-indigo-300 transition-colors relative">
+                        <div className="flex justify-between items-start">
+                        <div>
+                            <p className="font-bold text-slate-800">{item.word}</p>
+                            <p className="text-xs text-slate-500 italic">{item.partOfSpeech}</p>
+                        </div>
+                        <button 
+                            onClick={() => handleDelete(item.id)}
+                            className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">{item.definition}</p>
+                    </div>
+                    ))}
+
+                    {isAdding ? (
+                    <div className="bg-white p-3 rounded-lg border-2 border-indigo-100 animate-in fade-in slide-in-from-bottom-2">
+                        <input
+                        autoFocus
+                        className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-medium"
+                        placeholder="Word"
+                        value={newWord}
+                        onChange={(e) => setNewWord(e.target.value)}
+                        />
+                        <input
+                        className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm"
+                        placeholder="Definition"
+                        value={newDef}
+                        onChange={(e) => setNewDef(e.target.value)}
+                        />
+                        <div className="flex gap-2 justify-end mt-2">
+                            <button 
+                                onClick={() => setIsAdding(false)}
+                                className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={handleAddWord}
+                                className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+                    ) : (
+                        <button 
+                            onClick={() => setIsAdding(true)}
+                            className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-indigo-400 hover:text-indigo-600 flex items-center justify-center gap-2 text-sm transition-all"
+                        >
+                            <Plus size={16} /> Add Manually
+                        </button>
+                    )}
+                </div>
             )}
-        </div>
+          </>
       )}
     </div>
   );

@@ -1,26 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server } from 'lucide-react';
+import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X } from 'lucide-react';
 import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings } from './types';
 import VocabularyPanel from './components/VocabularyPanel';
 import ChatMessage from './components/ChatMessage';
 import SettingsModal from './components/SettingsModal';
 import QuizMode from './components/QuizMode';
 import TextSelectionTooltip from './components/TextSelectionTooltip';
-import { generateChatResponse } from './services/geminiService';
+import { generateChatResponse, defineSelection } from './services/geminiService';
 import { speakText, stopSpeaking } from './utils/ttsUtils';
 
 function App() {
   const [vocabulary, setVocabulary] = useState<VocabularyItem[]>(DEFAULT_VOCABULARY);
-  const [settings, setSettings] = useState<Settings>({
-    level: EnglishLevel.B1,
-    voiceName: '', 
-    systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
-    userPersona: "",
-    baseUrl: "",
-    apiKey: "", 
-    selectedModel: "gemini-3-flash-preview",
-    initialGreeting: "Hello! I'm your English tutor. I've updated my Worldbook. What would you like to talk about today?"
+  
+  // Load settings from localStorage or use defaults
+  const [settings, setSettings] = useState<Settings>(() => {
+    const saved = localStorage.getItem('lingoleap_settings');
+    if (saved) {
+        try {
+            return JSON.parse(saved);
+        } catch (e) {
+            console.error("Failed to parse settings", e);
+        }
+    }
+    return {
+        level: EnglishLevel.B1,
+        voiceName: '', 
+        systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
+        userPersona: "",
+        longTermMemory: "", // Default empty memory
+        baseUrl: "",
+        apiKey: "", 
+        selectedModel: "gemini-3-flash-preview",
+        initialGreeting: "Hello! I'm your English tutor. I've updated my Worldbook. What would you like to talk about today?"
+    };
   });
+
+  // Persist settings whenever they change
+  useEffect(() => {
+      localStorage.setItem('lingoleap_settings', JSON.stringify(settings));
+  }, [settings]);
 
   const [mode, setMode] = useState<'chat' | 'quiz'>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -28,6 +46,10 @@ function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  
+  // Tap-to-Define State
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [isDefining, setIsDefining] = useState(false);
   
   const [messages, setMessages] = useState<ChatMessageType[]>([
     {
@@ -69,7 +91,33 @@ function App() {
 
   const handleAddGlobalVocab = (item: VocabularyItem) => {
       setVocabulary(prev => [...prev, item]);
-      // Show mini toast or visual feedback could go here
+  };
+
+  const handleUpdateSettings = (newSettings: Settings | ((prev: Settings) => Settings)) => {
+      setSettings(newSettings);
+  };
+
+  // --- Mobile/Desktop Tap-to-Define Logic ---
+  const handleWordSelect = (word: string) => {
+      setSelectedWord(word);
+  };
+
+  const handleConfirmDefinition = async () => {
+      if (!selectedWord) return;
+      setIsDefining(true);
+      try {
+          const item = await defineSelection(selectedWord, settings);
+          if (item) {
+              handleAddGlobalVocab(item);
+              setSelectedWord(null); // Close modal on success
+          } else {
+              showError("Could not define word.");
+          }
+      } catch (e) {
+          showError("Definition failed. Check settings.");
+      } finally {
+          setIsDefining(false);
+      }
   };
 
   const handleSend = async () => {
@@ -97,7 +145,6 @@ function App() {
     }));
 
     try {
-      // API returns an Array of bubbles (multi-bubble response)
       const responseItems = await generateChatResponse(userMsg.text, history, vocabulary, settings);
       
       const newMessages = responseItems.map((item, index) => ({
@@ -111,6 +158,12 @@ function App() {
     } catch (error: any) {
       console.error("Failed to generate response", error);
       showError(error.message || "Failed to generate response. Check your settings.");
+      
+      setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'model',
+          text: `⚠️ Error: ${error.message || 'Connection interrupted'}. Please check your API Key/Proxy settings.`
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -135,11 +188,57 @@ function App() {
     }
   };
 
+  const hasApiKey = !!settings.apiKey || !!process.env.API_KEY;
+
   return (
     <div className="flex h-full relative bg-slate-50 overflow-hidden">
       
-      {/* Global Text Selection Tooltip */}
+      {/* Global Text Selection Tooltip (Desktop Mouse Selection) */}
       <TextSelectionTooltip settings={settings} onAddVocabulary={handleAddGlobalVocab} />
+
+      {/* Tap-to-Define Bottom Sheet/Modal (Mobile/Tablet Friendly) */}
+      {selectedWord && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none">
+              {/* Backdrop */}
+              <div 
+                className="absolute inset-0 bg-black/20 pointer-events-auto transition-opacity"
+                onClick={() => setSelectedWord(null)}
+              ></div>
+              
+              {/* Card */}
+              <div className="bg-white w-full sm:w-96 p-5 rounded-t-2xl sm:rounded-2xl shadow-2xl transform transition-transform animate-in slide-in-from-bottom-4 pointer-events-auto mb-0 sm:mb-10 mx-4 flex flex-col gap-4">
+                  <div className="flex justify-between items-start">
+                      <div>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Define Word</p>
+                          <h3 className="text-2xl font-bold text-slate-800 break-all">"{selectedWord}"</h3>
+                      </div>
+                      <button 
+                        onClick={() => setSelectedWord(null)}
+                        className="p-1 rounded-full hover:bg-slate-100 text-slate-400"
+                      >
+                          <X size={20} />
+                      </button>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-2">
+                      <button 
+                          onClick={() => speakText(selectedWord, settings.voiceName)}
+                          className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
+                      >
+                          <Volume2 size={18} /> Read
+                      </button>
+                      <button 
+                          onClick={handleConfirmDefinition}
+                          disabled={isDefining}
+                          className="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md disabled:opacity-70"
+                      >
+                          {isDefining ? <Loader2 size={18} className="animate-spin" /> : <BookPlus size={18} />}
+                          Add to Worldbook
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {errorMsg && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-3 rounded-lg shadow-xl z-50 flex items-center gap-2 text-sm font-medium animate-in fade-in slide-in-from-top-2 w-[90%] md:w-auto text-center justify-center">
@@ -162,19 +261,25 @@ function App() {
         vocabulary={vocabulary}
         setVocabulary={setVocabulary}
         level={settings.level}
-        setLevel={(l) => setSettings(prev => ({...prev, level: l}))}
+        setLevel={(l) => handleUpdateSettings(prev => ({...prev, level: l}))}
         settings={settings}
+        setSettings={handleUpdateSettings} // Pass setter to update memory
+        messages={messages} // Pass messages for sync summary
       />
 
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
-        setSettings={setSettings}
+        setSettings={handleUpdateSettings}
+        // Pass full state control for backup/restore
+        vocabulary={vocabulary}
+        setVocabulary={setVocabulary}
+        messages={messages}
+        setMessages={setMessages}
       />
 
       {/* Main Area */}
-      {/* On desktop (md), push content with margin. On mobile, content stays full width underneath overlay. */}
       <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${isSidebarOpen ? 'md:ml-80' : ''}`}>
         
         {/* Header */}
@@ -190,14 +295,12 @@ function App() {
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shrink-0">
                     <Sparkles size={16} />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex flex-col justify-center">
                     <h1 className="font-bold text-slate-800 leading-tight truncate">LingoLeap</h1>
                     <div className="flex items-center gap-2 text-xs text-slate-500 hidden sm:flex">
-                        <span>{mode === 'chat' ? 'Chat Mode' : 'Quiz Mode'}</span>
-                        <span>•</span>
                         <div className="flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
                              <Server size={10} />
-                             <span className="truncate max-w-[80px] md:max-w-[120px]" title={settings.selectedModel}>{settings.selectedModel}</span>
+                             <span className="truncate max-w-[150px]" title={settings.selectedModel}>{settings.selectedModel}</span>
                         </div>
                     </div>
                 </div>
@@ -234,7 +337,7 @@ function App() {
              </button>
              <button 
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors flex items-center gap-2"
+                className={`p-2 rounded-lg transition-colors flex items-center gap-2 ${hasApiKey ? 'bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600' : 'bg-red-100 text-red-600 animate-pulse'}`}
                 title="Settings"
              >
                 <SettingsIcon size={18} />
@@ -255,6 +358,7 @@ function App() {
                         onPlayFullAudio={handlePlayFullAudio}
                         onStopAudio={stopSpeaking}
                         onDelete={handleDeleteMessage}
+                        onWordSelect={handleWordSelect}
                         playingMessageId={playingMessageId}
                         voiceName={settings.voiceName}
                     />
@@ -292,7 +396,7 @@ function App() {
                     </button>
                 </div>
                 <p className="text-center text-[10px] md:text-xs text-slate-400 mt-2 hidden sm:block">
-                    Highlight any text to add to Worldbook.
+                    Highlight (Desktop) or Tap (Mobile) any text to add to Worldbook.
                 </p>
                 </div>
             </>

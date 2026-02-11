@@ -9,6 +9,7 @@ interface ChatMessageProps {
   onPlayFullAudio: (text: string, messageId: string) => void;
   onStopAudio: () => void;
   onDelete: (id: string) => void;
+  onWordSelect: (word: string) => void; // New prop for tap-to-define
   playingMessageId: string | null;
   voiceName: string;
 }
@@ -19,15 +20,24 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   onPlayFullAudio,
   onStopAudio,
   onDelete,
+  onWordSelect,
   playingMessageId,
   voiceName,
 }) => {
   const isUser = message.role === 'user';
   const isPlaying = playingMessageId === message.id;
 
-  const handleWordClick = (e: React.MouseEvent, word: string) => {
+  const handleKnownWordClick = (e: React.MouseEvent, word: string) => {
     e.stopPropagation();
     speakText(word, voiceName);
+  };
+
+  const handleRegularWordClick = (e: React.MouseEvent, word: string) => {
+    e.stopPropagation();
+    // Only allow clicking model words for definition to avoid misclicks on user input
+    if (!isUser) {
+        onWordSelect(word);
+    }
   };
 
   const handlePlayToggle = () => {
@@ -39,53 +49,62 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const renderText = useMemo(() => {
-    if (!message.usedVocabulary || message.usedVocabulary.length === 0) {
-      return (
-        <p className={`whitespace-pre-wrap ${isUser ? 'text-base' : 'text-lg leading-relaxed'}`}>
-          {message.text}
-        </p>
-      );
-    }
-
-    // Split logic: Keep delimiters to preserve punctuation
-    const words = message.text.split(/(\s+|[.,!?;:])/);
+    // Split by spaces and punctuation, keeping delimiters to preserve formatting
+    const words = message.text.split(/(\s+|[.,!?;:()""''])/);
     
     return (
-      <p className={`whitespace-pre-wrap ${isUser ? 'text-base' : 'text-lg leading-[3.5rem]'}`}>
+      <p className={`whitespace-pre-wrap ${isUser ? 'text-base' : 'text-lg leading-[2.5rem]'}`}>
         {words.map((part, index) => {
           const cleanPart = part.toLowerCase().replace(/[^a-z]/g, '');
           
-          // If purely punctuation or space, just render
+          // 1. If purely punctuation or space, just render
           if (!cleanPart) return <span key={index}>{part}</span>;
 
+          // 2. Check if it's a "Known Vocabulary" (AI explicitly taught this)
+          // Find the word in the message's contextual vocabulary list
           const vocabMatch = message.usedVocabulary?.find(v => 
-            v.toLowerCase() === cleanPart || 
-            (cleanPart.length > 3 && v.toLowerCase().startsWith(cleanPart.substring(0, cleanPart.length - 1)))
+            v.word.toLowerCase() === cleanPart || 
+            (cleanPart.length > 3 && v.word.toLowerCase().startsWith(cleanPart.substring(0, cleanPart.length - 1)))
           );
           
-          const fullVocabData = vocabMatch ? vocabulary.find(v => v.word.toLowerCase() === vocabMatch.toLowerCase()) : null;
+          // Double check it exists in global list to ensure it's a "tracked" word
+          const fullVocabData = vocabMatch 
+              ? vocabulary.find(v => v.word.toLowerCase() === vocabMatch.word.toLowerCase()) 
+              : null;
 
           if (vocabMatch && fullVocabData) {
             return (
               <span 
                 key={index}
-                className="inline-flex flex-col items-center align-middle mx-1.5 relative -bottom-2 group"
-                onClick={(e) => handleWordClick(e, part)}
+                className="inline-flex flex-col items-center align-middle mx-1 relative -bottom-1.5 group cursor-pointer"
+                onClick={(e) => handleKnownWordClick(e, part)}
               >
-                <span className="text-indigo-700 font-bold border-b-2 border-indigo-300 hover:border-indigo-600 cursor-pointer transition-colors">
+                <span className="text-indigo-700 font-bold border-b-2 border-indigo-300 hover:border-indigo-600 transition-colors">
                     {part}
                 </span>
-                <span className="text-[10px] text-slate-400 font-normal leading-none mt-1 select-none whitespace-nowrap">
-                    {fullVocabData.definition}
+                {/* Display the concise contextual translation from the message metadata */}
+                <span className="text-[9px] text-slate-400 font-medium leading-none mt-0.5 select-none whitespace-nowrap">
+                    {vocabMatch.translation}
                 </span>
               </span>
             );
           }
-          return <span key={index}>{part}</span>;
+
+          // 3. Regular Word (Clickable for Definition)
+          // We wrap standard words in a span that handles click
+          return (
+            <span 
+                key={index} 
+                onClick={(e) => handleRegularWordClick(e, cleanPart)}
+                className={!isUser ? "hover:bg-indigo-50 active:bg-indigo-100 rounded px-0.5 cursor-pointer transition-colors select-text" : ""}
+            >
+                {part}
+            </span>
+          );
         })}
       </p>
     );
-  }, [message.text, message.usedVocabulary, vocabulary, voiceName, isUser]);
+  }, [message.text, message.usedVocabulary, vocabulary, voiceName, isUser, onWordSelect]);
 
   return (
     <div className={`flex w-full mb-6 group ${isUser ? 'justify-end' : 'justify-start'}`}>
