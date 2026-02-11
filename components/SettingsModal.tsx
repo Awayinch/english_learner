@@ -8,7 +8,6 @@ import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
 // In a real build, this might be imported differently, but this works for this structure.
-// Assuming metadata.json is fetchable or we hardcode the check logic.
 const APP_VERSION = "1.0.0"; // Must match metadata.json
 
 interface SettingsModalProps {
@@ -141,6 +140,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setUpdateStatus('checking');
       try {
           // Fetch the package.json from the main repository
+          // Note: using 'main' branch. Adjust if you use 'master'.
           const res = await fetch('https://raw.githubusercontent.com/awayinch/LingoLeap/main/metadata.json?t=' + Date.now());
           if (!res.ok) throw new Error("Could not reach update server.");
           
@@ -328,13 +328,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2 font-bold text-white">
                         <Smartphone size={20} />
-                        <h3>App Info</h3>
+                        <h3>App Info & Updates</h3>
                     </div>
                     <span className="text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600">v{APP_VERSION}</span>
                 </div>
                 
                 <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-                    To install as a mobile app: Tap your browser menu (Chrome/Safari) and select <strong>"Add to Home Screen"</strong>.
+                    <strong>To install app icon:</strong><br/>
+                    • <strong>iOS (Safari):</strong> Share Button → "Add to Home Screen"<br/>
+                    • <strong>Android (Chrome):</strong> Menu (⋮) → "Install App" or "Add to Home Screen"
                 </p>
 
                 <div className="flex items-center gap-3">
@@ -358,7 +360,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             <Sparkles size={14} /> New Version Available: v{remoteVersion}
                         </div>
                         <div className="text-xs text-slate-300 space-y-2">
-                            <p>If running on Termux/Local, run:</p>
+                            <p><strong>Running on Termux/Local?</strong> Run this command:</p>
                             <code className="block bg-black/50 p-2 rounded font-mono text-green-300 select-all cursor-pointer" onClick={(e) => {
                                 const target = e.target as HTMLElement;
                                 navigator.clipboard.writeText(target.innerText);
@@ -366,7 +368,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             }}>
                                 git pull && npm run build
                             </code>
-                            <p>If running on Web/Vercel: Just refresh the page.</p>
+                            <p><strong>Running on Vercel/Web?</strong> The site updates automatically on refresh.</p>
                         </div>
                     </div>
                 )}
