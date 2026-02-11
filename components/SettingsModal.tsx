@@ -7,7 +7,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.0"; // Must match metadata.json
+const APP_VERSION = "1.0.1"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -64,6 +64,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Update Check State
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
   const [remoteVersion, setRemoteVersion] = useState('');
+  const [checkedRepo, setCheckedRepo] = useState('');
 
   // Restore / Preview State
   const [backupPreview, setBackupPreview] = useState<BackupData | null>(null);
@@ -140,22 +141,54 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // --- Update Checker ---
   const handleCheckForUpdates = async () => {
       setUpdateStatus('checking');
+      
+      // Determine which repo to check: User's config (if they are dev) OR Official
+      // If user hasn't set a repo, or it seems to be an Obsidian vault, fallback to official.
+      const officialRepo = "Awayinch/english_learner";
+      let targetRepo = officialRepo;
+      
+      // If user has set a repo, try checking that first (assuming they might be self-hosting source code)
+      // This allows forks to track their own updates if they keep metadata.json updated.
+      if (settings.githubRepo && settings.githubRepo.includes("/")) {
+          targetRepo = settings.githubRepo;
+      }
+
+      setCheckedRepo(targetRepo);
+
       try {
-          const res = await fetch('https://raw.githubusercontent.com/Awayinch/english_learner/main/metadata.json?t=' + Date.now());
-          if (!res.ok) throw new Error("Could not reach update server.");
+          const res = await fetch(`https://raw.githubusercontent.com/${targetRepo}/main/metadata.json?t=${Date.now()}`);
+          
+          if (!res.ok) {
+               // Fallback to official if custom repo check fails (e.g. user uses repo only for data, not code)
+               if (targetRepo !== officialRepo) {
+                   const fallbackRes = await fetch(`https://raw.githubusercontent.com/${officialRepo}/main/metadata.json?t=${Date.now()}`);
+                   if (fallbackRes.ok) {
+                       const meta = await fallbackRes.json();
+                       processUpdateData(meta, officialRepo);
+                       return;
+                   }
+               }
+               throw new Error("Could not reach update server.");
+          }
           
           const remoteMeta = await res.json();
-          const rVersion = remoteMeta.version;
-          setRemoteVersion(rVersion);
+          processUpdateData(remoteMeta, targetRepo);
 
-          if (compareVersions(rVersion, APP_VERSION) > 0) {
-              setUpdateStatus('available');
-          } else {
-              setUpdateStatus('uptodate');
-          }
       } catch (e) {
           console.error(e);
           setUpdateStatus('error');
+      }
+  };
+
+  const processUpdateData = (remoteMeta: any, repoName: string) => {
+      const rVersion = remoteMeta.version;
+      setRemoteVersion(rVersion);
+      setCheckedRepo(repoName);
+
+      if (compareVersions(rVersion, APP_VERSION) > 0) {
+          setUpdateStatus('available');
+      } else {
+          setUpdateStatus('uptodate');
       }
   };
 
@@ -365,48 +398,64 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     • <strong>iOS (Safari):</strong> Share Button → "Add to Home Screen"
                 </p>
 
-                <div className="flex items-center gap-3">
-                    <button 
-                        onClick={handleCheckForUpdates}
-                        disabled={updateStatus === 'checking'}
-                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                    >
-                        {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
-                        {updateStatus === 'checking' ? 'Checking...' : 'Check Public Repo Updates'}
-                    </button>
-                    
-                    <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
-                        <ExternalLink size={16} />
-                    </a>
+                <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                        <button 
+                            onClick={handleCheckForUpdates}
+                            disabled={updateStatus === 'checking'}
+                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                        >
+                            {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
+                            {updateStatus === 'checking' ? 'Checking...' : 'Check Public Repo Updates'}
+                        </button>
+                        
+                        <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
+                            <ExternalLink size={16} />
+                        </a>
+                    </div>
                 </div>
 
-                {updateStatus === 'available' && (
-                    <div className="mt-3 p-3 bg-indigo-900/50 border border-indigo-500/50 rounded-lg animate-in fade-in slide-in-from-top-1">
-                        <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-1">
-                            <Sparkles size={14} /> New Version Available: v{remoteVersion}
+                {/* Update Status Display */}
+                {updateStatus !== 'idle' && updateStatus !== 'checking' && (
+                    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600">
+                        <div className="flex justify-between text-xs text-slate-400 mb-2 border-b border-slate-700 pb-2">
+                            <span>Local: <strong>v{APP_VERSION}</strong></span>
+                            <span>Remote: <strong>v{remoteVersion || '?'}</strong></span>
                         </div>
-                        <div className="text-xs text-slate-300 space-y-2">
-                            <p><strong>Running on Termux/Local?</strong> Run this command:</p>
-                            <code className="block bg-black/50 p-2 rounded font-mono text-green-300 select-all cursor-pointer" onClick={(e) => {
-                                const target = e.target as HTMLElement;
-                                navigator.clipboard.writeText(target.innerText);
-                                alert("Command copied!");
-                            }}>
-                                cd ~/LingoLeap && git pull && npm run build
-                            </code>
-                            <p><strong>Running on Vercel/Web?</strong> The site updates automatically on refresh.</p>
-                        </div>
-                    </div>
-                )}
+                        
+                        {updateStatus === 'available' && (
+                            <div className="animate-in fade-in slide-in-from-top-1">
+                                <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-1">
+                                    <Sparkles size={14} /> New Version Available
+                                </div>
+                                <div className="text-xs text-slate-300 space-y-2 mt-2">
+                                    <p><strong>To Update (Termux/Local):</strong></p>
+                                    <code className="block bg-black/50 p-2 rounded font-mono text-green-300 select-all cursor-pointer" onClick={(e) => {
+                                        const target = e.target as HTMLElement;
+                                        navigator.clipboard.writeText(target.innerText);
+                                        alert("Command copied!");
+                                    }}>
+                                        cd ~/LingoLeap && git pull && npm run build
+                                    </code>
+                                </div>
+                            </div>
+                        )}
 
-                {updateStatus === 'uptodate' && (
-                    <div className="mt-3 text-xs text-green-400 flex items-center gap-2">
-                        <CheckCircle size={12} /> You are on the latest version.
-                    </div>
-                )}
-                 {updateStatus === 'error' && (
-                    <div className="mt-3 text-xs text-red-400 flex items-center gap-2">
-                        <AlertCircle size={12} /> Could not fetch update info.
+                        {updateStatus === 'uptodate' && (
+                            <div className="text-xs text-green-400 flex items-center gap-2">
+                                <CheckCircle size={12} /> You are on the latest version.
+                            </div>
+                        )}
+                        
+                        {updateStatus === 'error' && (
+                            <div className="text-xs text-red-400 flex items-center gap-2">
+                                <AlertCircle size={12} /> Could not fetch update info.
+                            </div>
+                        )}
+                        
+                        <div className="text-[10px] text-slate-500 mt-2 text-right italic">
+                            Checked: {checkedRepo}
+                        </div>
                     </div>
                 )}
             </div>
