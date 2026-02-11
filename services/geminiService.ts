@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { VocabularyItem, EnglishLevel, Settings, QuizQuestion } from "../types";
 
@@ -45,7 +46,8 @@ const generateContentOpenAICompat = async (
     messages: { role: string; content: string }[],
     jsonMode: boolean = true,
     overrideBaseUrl?: string,
-    overrideApiKey?: string
+    overrideApiKey?: string,
+    signal?: AbortSignal
 ) => {
     const apiKey = overrideApiKey || settings.apiKey || process.env.API_KEY;
     if (!apiKey) throw new Error("API Key is missing for Proxy.");
@@ -76,7 +78,8 @@ const generateContentOpenAICompat = async (
             "Content-Type": "application/json",
             "Authorization": `Bearer ${apiKey}`
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: signal
     });
 
     if (!response.ok) {
@@ -162,7 +165,8 @@ export const generateChatResponse = async (
   userMessage: string,
   history: { role: string; parts: { text: string }[] }[],
   vocabulary: VocabularyItem[],
-  settings: Settings
+  settings: Settings,
+  signal?: AbortSignal
 ): Promise<ChatResponseItem[]> => {
   
   const vocabListString = vocabulary.map((v) => `${v.word} (${v.definition})`).join(", ");
@@ -200,12 +204,14 @@ export const generateChatResponse = async (
           { role: 'user', content: userMessage }
       ];
       
-      const textResult = await generateContentOpenAICompat(settings, modelName, messages, true);
+      const textResult = await generateContentOpenAICompat(settings, modelName, messages, true, undefined, undefined, signal);
       const parsed = extractJson(textResult);
       return Array.isArray(parsed) ? parsed : [parsed];
 
   } else {
       // --- OFFICIAL SDK MODE ---
+      if (signal?.aborted) throw new Error("Aborted");
+      
       const ai = createClient(settings.apiKey, undefined);
       const contents = [
         ...history.map(h => ({
@@ -233,7 +239,14 @@ export const generateChatResponse = async (
             required: ["text", "usedVocabulary"]
         }
       };
+      
+      // Check cancel before request
+      if (signal?.aborted) throw new Error("Aborted");
 
+      // Note: @google/genai SDK v1 doesn't seem to fully expose AbortSignal via generateContent config yet in all types,
+      // but we can check signal before calling. For true network abort in SDK mode, standard fetch injection is needed or library update.
+      // Proxy mode handles true network cancellation via fetch signal.
+      
       const response = await ai.models.generateContent({
         model: modelName,
         contents: contents,
@@ -243,6 +256,8 @@ export const generateChatResponse = async (
             responseSchema: schemaObj
         },
       });
+      
+      if (signal?.aborted) throw new Error("Aborted");
       
       const parsed = extractJson(response.text || "[]");
       return Array.isArray(parsed) ? parsed : [parsed];
@@ -324,7 +339,7 @@ export const processVocabularyFromText = async (
     if (settings.baseUrl) {
         // PROXY
         if (signal?.aborted) throw new Error("Aborted");
-        const resText = await generateContentOpenAICompat(settings, modelName, [{ role: 'user', content: prompt }], true);
+        const resText = await generateContentOpenAICompat(settings, modelName, [{ role: 'user', content: prompt }], true, undefined, undefined, signal);
         const items = extractJson(resText);
         return Array.isArray(items) ? items.map((item: any) => ({ ...item, id: Date.now().toString() + Math.random().toString().substr(2, 5) })) : [];
     } else {

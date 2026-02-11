@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X } from 'lucide-react';
+import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X, Square } from 'lucide-react';
 import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings } from './types';
 import VocabularyPanel from './components/VocabularyPanel';
 import ChatMessage from './components/ChatMessage';
@@ -24,6 +24,7 @@ function App() {
     return {
         level: EnglishLevel.B1,
         voiceName: '', 
+        useEdgeTTS: true, // Default to true for better experience
         systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
         userPersona: "",
         longTermMemory: "", 
@@ -91,6 +92,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
+  // Abort Controller for stopping generation
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   // Tap-to-Define State
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [isDefining, setIsDefining] = useState(false);
@@ -156,8 +160,21 @@ function App() {
       }
   };
 
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setIsLoading(false);
+    }
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    if (isLoading) {
+        handleStopGeneration();
+        return;
+    }
+
+    if (!input.trim()) return;
 
     if (!settings.apiKey && !process.env.API_KEY) {
         setIsSettingsOpen(true);
@@ -175,13 +192,23 @@ function App() {
     setInput('');
     setIsLoading(true);
 
+    // Initialize AbortController
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     const history = messages.map(m => ({
       role: m.role,
       parts: [{ text: m.text }]
     }));
 
     try {
-      const responseItems = await generateChatResponse(userMsg.text, history, vocabulary, settings);
+      const responseItems = await generateChatResponse(
+          userMsg.text, 
+          history, 
+          vocabulary, 
+          settings,
+          controller.signal // Pass signal
+      );
       
       const newMessages = responseItems.map((item, index) => ({
         id: (Date.now() + index + 1).toString(),
@@ -192,23 +219,33 @@ function App() {
 
       setMessages(prev => [...prev, ...newMessages]);
     } catch (error: any) {
-      console.error("Failed to generate response", error);
-      showError(error.message || "Failed to generate response. Check your settings.");
-      
-      setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'model',
-          text: `⚠️ Error: ${error.message || 'Connection interrupted'}. Please check your API Key/Proxy settings.`
-      }]);
+      if (error.message === "Aborted" || error.name === "AbortError") {
+          // User stopped specifically, maybe add a small indicator or just do nothing
+          console.log("Generation stopped by user.");
+      } else {
+          console.error("Failed to generate response", error);
+          showError(error.message || "Failed to generate response. Check your settings.");
+          
+          setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              role: 'model',
+              text: `⚠️ Error: ${error.message || 'Connection interrupted'}. Please check your API Key/Proxy settings.`
+          }]);
+      }
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      // If loading, pressing enter should NOT resend, but maybe stop?
+      // Let's keep it safe: Only send if not loading.
+      if (!isLoading) {
+          handleSend();
+      }
     }
   };
 
@@ -418,17 +455,23 @@ function App() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type your message..."
+                    placeholder={isLoading ? "Generating response..." : "Type your message..."}
                     className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none bg-slate-50 max-h-32 min-h-[50px] text-base"
                     rows={1}
                     style={{ minHeight: '52px' }}
+                    disabled={isLoading && false} // Keep enabled to allow user to see they can stop? Actually better to keep enabled but change placeholder.
                     />
                     <button 
                         onClick={handleSend}
-                        disabled={!input.trim() || isLoading}
-                        className="absolute right-2 bottom-2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        disabled={!isLoading && !input.trim()}
+                        className={`absolute right-2 bottom-2 p-2 rounded-lg transition-all ${
+                            isLoading 
+                            ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
+                        }`}
+                        title={isLoading ? "Stop Generation" : "Send Message"}
                     >
-                        <Send size={18} />
+                        {isLoading ? <Square size={18} fill="currentColor" /> : <Send size={18} />}
                     </button>
                 </div>
                 <p className="text-center text-[10px] md:text-xs text-slate-400 mt-2 hidden sm:block">

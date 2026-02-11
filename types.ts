@@ -28,6 +28,7 @@ export enum EnglishLevel {
 export interface Settings {
   level: EnglishLevel;
   voiceName: string; 
+  useEdgeTTS: boolean; // New: Toggle for High Quality Online TTS
   systemPersona: string;
   userPersona: string;
   longTermMemory?: string; // New: Persistent memory notes
