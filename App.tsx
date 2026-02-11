@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X } from 'lucide-react';
 import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings } from './types';
@@ -10,9 +11,7 @@ import { generateChatResponse, defineSelection } from './services/geminiService'
 import { speakText, stopSpeaking } from './utils/ttsUtils';
 
 function App() {
-  const [vocabulary, setVocabulary] = useState<VocabularyItem[]>(DEFAULT_VOCABULARY);
-  
-  // Load settings from localStorage or use defaults
+  // Load Settings (Existing logic)
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('lingoleap_settings');
     if (saved) {
@@ -27,7 +26,7 @@ function App() {
         voiceName: '', 
         systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
         userPersona: "",
-        longTermMemory: "", // Default empty memory
+        longTermMemory: "", 
         baseUrl: "",
         apiKey: "", 
         selectedModel: "gemini-3-flash-preview",
@@ -35,10 +34,55 @@ function App() {
     };
   });
 
-  // Persist settings whenever they change
+  // Load Vocabulary with persistence
+  const [vocabulary, setVocabulary] = useState<VocabularyItem[]>(() => {
+      const saved = localStorage.getItem('lingoleap_vocabulary');
+      if (saved) {
+          try {
+              return JSON.parse(saved);
+          } catch (e) {
+              console.error("Failed to parse vocabulary", e);
+          }
+      }
+      return DEFAULT_VOCABULARY;
+  });
+
+  // Load Messages with persistence
+  const [messages, setMessages] = useState<ChatMessageType[]>(() => {
+      const saved = localStorage.getItem('lingoleap_messages');
+      if (saved) {
+          try {
+              return JSON.parse(saved);
+          } catch (e) {
+              console.error("Failed to parse messages", e);
+          }
+      }
+      // Default initial state if nothing saved
+      return [{
+        id: 'welcome',
+        role: 'model',
+        text: settings.initialGreeting,
+        usedVocabulary: []
+      }];
+  });
+
+  // --- PERSISTENCE EFFECTS ---
+  
+  // Save Settings (Existing)
   useEffect(() => {
       localStorage.setItem('lingoleap_settings', JSON.stringify(settings));
   }, [settings]);
+
+  // Save Vocabulary (New)
+  useEffect(() => {
+      localStorage.setItem('lingoleap_vocabulary', JSON.stringify(vocabulary));
+  }, [vocabulary]);
+
+  // Save Messages (New)
+  useEffect(() => {
+      localStorage.setItem('lingoleap_messages', JSON.stringify(messages));
+  }, [messages]);
+
 
   const [mode, setMode] = useState<'chat' | 'quiz'>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -51,15 +95,7 @@ function App() {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [isDefining, setIsDefining] = useState(false);
   
-  const [messages, setMessages] = useState<ChatMessageType[]>([
-    {
-      id: 'welcome',
-      role: 'model',
-      text: settings.initialGreeting,
-      usedVocabulary: []
-    }
-  ]);
-
+  // Update welcome message if settings change (only if it's the only message)
   useEffect(() => {
     if (messages.length === 1 && messages[0].id === 'welcome' && messages[0].text !== settings.initialGreeting) {
         setMessages([{

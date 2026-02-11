@@ -1,7 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
-import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink } from 'lucide-react';
+import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive } from 'lucide-react';
 import { loadVoices } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
@@ -58,6 +58,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [cloudMsg, setCloudMsg] = useState('');
   
+  // Local File States
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Update Check State
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
   const [remoteVersion, setRemoteVersion] = useState('');
@@ -138,7 +141,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleCheckForUpdates = async () => {
       setUpdateStatus('checking');
       try {
-          // Pointing to your public repo 'english_learner'
           const res = await fetch('https://raw.githubusercontent.com/Awayinch/english_learner/main/metadata.json?t=' + Date.now());
           if (!res.ok) throw new Error("Could not reach update server.");
           
@@ -167,6 +169,47 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           if (p1 < p2) return -1;
       }
       return 0;
+  };
+
+  // --- Local File Export/Import ---
+  const handleExportLocal = () => {
+      const backupData: BackupData = {
+          version: 1,
+          date: new Date().toISOString(),
+          settings: settings,
+          vocabulary: vocabulary || [],
+          messages: messages || []
+      };
+      
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `lingoleap_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
+
+  const handleImportLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+          try {
+              const jsonStr = event.target?.result as string;
+              const data = JSON.parse(jsonStr);
+              if (!data.settings && !data.vocabulary) throw new Error("Invalid backup structure.");
+              setBackupPreview(data);
+              setCloudStatus('success');
+              setCloudMsg('File loaded. Review below.');
+          } catch (err) {
+              setCloudStatus('error');
+              setCloudMsg('Failed to parse JSON file.');
+          }
+      };
+      reader.readAsText(file);
+      e.target.value = ''; // Reset input
   };
 
   // --- Cloud Logic ---
@@ -368,48 +411,103 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
             </div>
 
-           {/* Cloud Sync Section */}
+           {/* Cloud Sync & Local Backup Section */}
            <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-100">
                 <div className="flex items-center justify-between text-indigo-700 font-medium">
                     <div className="flex items-center gap-2">
                         <Cloud size={18} />
-                        <h3>Data Sync (GitHub)</h3>
+                        <h3>Data Management (Sync & Backup)</h3>
                     </div>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">GitHub Token</label>
-                        <input
-                            type="password"
-                            placeholder="ghp_xxxxxxxxxxxx"
-                            value={settings.githubToken || ''}
-                            onChange={(e) => handleChange('githubToken', e.target.value)}
-                            className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
+
+                {/* Local File Section (New) */}
+                <div className="bg-white p-3 rounded-lg border border-blue-200 mb-2">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                        <HardDrive size={16} className="text-slate-500"/>
+                        Local Storage
                     </div>
-                    <div className="flex gap-2">
-                            <div className="flex-1">
-                            <label className="block text-xs font-semibold text-slate-500 mb-1">Repo</label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                         <button 
+                            onClick={handleExportLocal}
+                            className="flex-1 py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300"
+                        >
+                            <Save size={14} /> Export to File
+                        </button>
+                        <div className="flex-1 relative">
+                            <input 
+                                type="file" 
+                                accept=".json"
+                                ref={fileInputRef}
+                                onChange={handleImportLocal}
+                                className="hidden"
+                            />
+                            <button 
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300"
+                            >
+                                <FolderOpen size={14} /> Restore from File
+                            </button>
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1 text-center">
+                        Keep a .json file safe. Restoring overrides current data.
+                    </p>
+                </div>
+                
+                {/* GitHub Sync Section */}
+                <div className="bg-white p-3 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
+                        <Github size={16} className="text-slate-500"/>
+                        GitHub Cloud Sync
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 mb-2">
+                        <div>
+                            <input
+                                type="password"
+                                placeholder="GitHub Token (ghp_...)"
+                                value={settings.githubToken || ''}
+                                onChange={(e) => handleChange('githubToken', e.target.value)}
+                                className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div className="flex gap-2">
                             <input
                                 type="text"
                                 placeholder="user/repo"
                                 value={settings.githubRepo || ''}
                                 onChange={(e) => handleChange('githubRepo', e.target.value)}
-                                className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none flex-1"
                             />
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-xs font-semibold text-slate-500 mb-1">Path</label>
                             <input
                                 type="text"
-                                placeholder="Backup/"
+                                placeholder="Path/"
                                 value={settings.githubPath || ''}
                                 onChange={(e) => handleChange('githubPath', e.target.value)}
-                                className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none flex-1"
                             />
                         </div>
                     </div>
+
+                    {!backupPreview && (
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <button 
+                                onClick={handleCloudUpload}
+                                disabled={isCloudLoading || !settings.githubToken}
+                                className="flex-1 py-2 px-3 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <UploadCloud size={14} />}
+                                Sync Up
+                            </button>
+                            <button 
+                                onClick={handleFetchBackup}
+                                disabled={isCloudLoading || !settings.githubToken}
+                                className="flex-1 py-2 px-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <DownloadCloud size={14} />}
+                                Sync Down
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {cloudStatus !== 'idle' && (
@@ -419,35 +517,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 )}
 
-                {!backupPreview && (
-                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                        <button 
-                            onClick={handleCloudUpload}
-                            disabled={isCloudLoading || !settings.githubToken}
-                            className="flex-1 py-2 px-3 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            {isCloudLoading ? <Loader2 size={16} className="animate-spin"/> : <UploadCloud size={16} />}
-                            Backup Current Data
-                        </button>
-                        <button 
-                            onClick={handleFetchBackup}
-                            disabled={isCloudLoading || !settings.githubToken}
-                            className="flex-1 py-2 px-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                            {isCloudLoading ? <Loader2 size={16} className="animate-spin"/> : <DownloadCloud size={16} />}
-                            Fetch Backup & Preview
-                        </button>
-                    </div>
-                )}
-
+                {/* RESTORE PREVIEW MODAL UI (Shared for File & Cloud) */}
                 {backupPreview && (
-                    <div className="mt-4 bg-white rounded-lg border border-indigo-100 p-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="mt-4 bg-white rounded-lg border border-indigo-100 p-4 animate-in fade-in slide-in-from-top-2 shadow-inner">
                         <div className="flex justify-between items-center mb-3">
                             <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                                <FileJson size={16} /> Backup Content
+                                <FileJson size={16} /> Import Preview
                             </h4>
                             <span className="text-xs text-slate-400">
-                                {new Date(backupPreview.date).toLocaleDateString()} {new Date(backupPreview.date).toLocaleTimeString()}
+                                {new Date(backupPreview.date).toLocaleDateString()}
                             </span>
                         </div>
 
