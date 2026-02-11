@@ -6,7 +6,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.5"; // Must match metadata.json
+const APP_VERSION = "1.0.6"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;

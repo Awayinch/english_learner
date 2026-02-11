@@ -6,7 +6,7 @@ LingoLeap is an immersive, personalized language learning web application powere
 Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.5-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.6-green.svg)
 ![Powered By](https://img.shields.io/badge/AI-Google%20Gemini-orange)
 
 ## ✨ Key Features
