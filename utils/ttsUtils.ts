@@ -1,3 +1,4 @@
+
 /**
  * Browser Native Text-to-Speech Utility
  * Uses window.speechSynthesis to avoid API quotas.
@@ -43,11 +44,16 @@ export const speakText = (text: string, voiceURI?: string): Promise<void> => {
       }
     }
 
-    // Default English fallback if no specific voice or voice not found, 
-    // but try to prefer a native English voice if the user didn't select one.
+    // Improved Fallback: Prefer Google voices for Android/Chrome which are higher quality
     if (!utterance.voice) {
+       const googleVoice = voices.find(v => v.name.includes("Google") && v.lang.startsWith('en'));
        const enVoice = voices.find(v => v.lang.startsWith('en'));
-       if (enVoice) utterance.voice = enVoice;
+       
+       if (googleVoice) {
+           utterance.voice = googleVoice;
+       } else if (enVoice) {
+           utterance.voice = enVoice;
+       }
     }
 
     utterance.rate = 1.0;
