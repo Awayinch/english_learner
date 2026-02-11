@@ -7,7 +7,6 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-// In a real build, this might be imported differently, but this works for this structure.
 const APP_VERSION = "1.0.0"; // Must match metadata.json
 
 interface SettingsModalProps {
@@ -139,9 +138,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleCheckForUpdates = async () => {
       setUpdateStatus('checking');
       try {
-          // Fetch the package.json from the main repository
-          // Note: using 'main' branch. Adjust if you use 'master'.
-          const res = await fetch('https://raw.githubusercontent.com/awayinch/LingoLeap/main/metadata.json?t=' + Date.now());
+          // Pointing to your public repo 'english_learner'
+          const res = await fetch('https://raw.githubusercontent.com/Awayinch/english_learner/main/metadata.json?t=' + Date.now());
           if (!res.ok) throw new Error("Could not reach update server.");
           
           const remoteMeta = await res.json();
@@ -159,7 +157,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
   };
 
-  // Simple semver comparison: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
   const compareVersions = (v1: string, v2: string) => {
       const parts1 = v1.split('.').map(Number);
       const parts2 = v2.split('.').map(Number);
@@ -196,7 +193,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               throw new Error("Failed to parse backup JSON. File might be corrupted.");
           }
 
-          // Basic validation
           if (!data.settings && !data.vocabulary) {
               throw new Error("Invalid backup format: Missing settings or vocabulary.");
           }
@@ -218,10 +214,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       const { connection, history, vocabulary: restoreVocab, memory, persona } = restoreSelection;
       const bSettings = backupPreview.settings;
 
-      // 1. Update Settings selectively
       setSettings(prev => {
           let next = { ...prev };
-          
           if (connection) {
               next.apiKey = bSettings.apiKey || next.apiKey;
               next.baseUrl = bSettings.baseUrl || next.baseUrl;
@@ -230,11 +224,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               next.summaryBaseUrl = bSettings.summaryBaseUrl || next.summaryBaseUrl;
               next.summaryModel = bSettings.summaryModel || next.summaryModel;
           }
-          
           if (memory) {
               next.longTermMemory = bSettings.longTermMemory || "";
           }
-
           if (persona) {
               next.systemPersona = bSettings.systemPersona || next.systemPersona;
               next.userPersona = bSettings.userPersona || next.userPersona;
@@ -242,24 +234,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               next.voiceName = bSettings.voiceName || next.voiceName;
               next.level = bSettings.level || next.level;
           }
-
           return next;
       });
 
-      // 2. Update Data
       if (restoreVocab && setVocabulary && backupPreview.vocabulary) {
           setVocabulary(backupPreview.vocabulary);
       }
-      
       if (history && setMessages && backupPreview.messages) {
           setMessages(backupPreview.messages);
       }
 
       setCloudStatus('success');
       setCloudMsg('Import Successful!');
-      setTimeout(() => {
-          setBackupPreview(null); // Clear preview mode
-      }, 1500);
+      setTimeout(() => setBackupPreview(null), 1500);
   };
 
   const handleCloudUpload = async () => {
@@ -280,7 +267,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           };
           
           await syncToGithub(settings, 'lingoleap_backup.json', JSON.stringify(backupData, null, 2));
-          
           setCloudStatus('success');
           setCloudMsg('Upload Complete! Saved to GitHub.');
       } catch (e: any) {
@@ -308,8 +294,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl w-[95%] sm:w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
-        
-        {/* Header */}
         <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white rounded-t-2xl shrink-0">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <SettingsIcon size={20} />
@@ -320,7 +304,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
 
             {/* App Info & Update Section */}
@@ -335,8 +318,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 
                 <p className="text-xs text-slate-400 mb-3 leading-relaxed">
                     <strong>To install app icon:</strong><br/>
-                    • <strong>iOS (Safari):</strong> Share Button → "Add to Home Screen"<br/>
-                    • <strong>Android (Chrome):</strong> Menu (⋮) → "Install App" or "Add to Home Screen"
+                    • <strong>Android (Chrome):</strong> Menu (⋮) → "Install App" or "Add to Home Screen"<br/>
+                    • <strong>iOS (Safari):</strong> Share Button → "Add to Home Screen"
                 </p>
 
                 <div className="flex items-center gap-3">
@@ -346,10 +329,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                     >
                         {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
-                        {updateStatus === 'checking' ? 'Checking...' : 'Check GitHub Updates'}
+                        {updateStatus === 'checking' ? 'Checking...' : 'Check Public Repo Updates'}
                     </button>
                     
-                    <a href="https://github.com/awayinch/LingoLeap" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
+                    <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
                         <ExternalLink size={16} />
                     </a>
                 </div>
@@ -366,7 +349,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 navigator.clipboard.writeText(target.innerText);
                                 alert("Command copied!");
                             }}>
-                                git pull && npm run build
+                                cd ~/LingoLeap && git pull && npm run build
                             </code>
                             <p><strong>Running on Vercel/Web?</strong> The site updates automatically on refresh.</p>
                         </div>
@@ -394,7 +377,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 </div>
                 
-                {/* GitHub Config Inputs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">GitHub Token</label>
@@ -430,7 +412,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 </div>
 
-                {/* Status Message */}
                 {cloudStatus !== 'idle' && (
                     <div className={`text-xs px-3 py-2 rounded flex items-center gap-2 font-medium ${cloudStatus === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {cloudStatus === 'success' ? <CheckCircle size={14}/> : <AlertCircle size={14}/>}
@@ -438,7 +419,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 )}
 
-                {/* Action Buttons (Hidden if Previewing) */}
                 {!backupPreview && (
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">
                         <button 
@@ -460,7 +440,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                 )}
 
-                {/* --- RESTORE PREVIEW UI --- */}
                 {backupPreview && (
                     <div className="mt-4 bg-white rounded-lg border border-indigo-100 p-4 animate-in fade-in slide-in-from-top-2">
                         <div className="flex justify-between items-center mb-3">
@@ -579,7 +558,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
            </div>
 
-           {/* Main API Settings (Only show if not previewing restore to save space, or keep visible) */}
+           {/* Main API Settings */}
            <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="flex items-center justify-between text-indigo-700 font-medium">
                     <div className="flex items-center gap-2">
