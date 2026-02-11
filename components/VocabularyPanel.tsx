@@ -67,7 +67,8 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
         definition: newDef.trim(),
         partOfSpeech: 'custom'
       };
-      setVocabulary([...vocabulary, newItem]);
+      // Prepend to show at top
+      setVocabulary([newItem, ...vocabulary]);
       setNewWord('');
       setNewDef('');
       setIsAdding(false);
@@ -431,39 +432,10 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       )}
                   </div>
               </div>
-              
-              {vocabulary.length === 0 && (
-                  <div className="text-center py-8 text-slate-400 text-sm">
-                      暂无单词。试试 AI 导入!
-                  </div>
-              )}
-              
-              {vocabulary.length > 0 && filteredVocabulary.length === 0 && (
-                  <div className="text-center py-8 text-slate-400 text-sm">
-                      未找到匹配的单词。
-                  </div>
-              )}
 
-              {filteredVocabulary.map((item) => (
-              <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 group hover:border-indigo-300 transition-colors relative">
-                  <div className="flex justify-between items-start">
-                  <div>
-                      <p className="font-bold text-slate-800">{item.word}</p>
-                      <p className="text-xs text-slate-500 italic">{item.partOfSpeech}</p>
-                  </div>
-                  <button 
-                      onClick={() => handleDelete(item.id)}
-                      className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
-                  >
-                      <Trash2 size={16} />
-                  </button>
-                  </div>
-                  <p className="text-sm text-slate-600 mt-1">{item.definition}</p>
-              </div>
-              ))}
-
+              {/* Manual Add Button/Form - Moved Here */}
               {isAdding ? (
-              <div className="bg-white p-3 rounded-lg border-2 border-indigo-100 animate-in fade-in slide-in-from-bottom-2">
+              <div className="bg-white p-3 rounded-lg border-2 border-indigo-100 animate-in fade-in slide-in-from-top-2">
                   <input
                   autoFocus
                   className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-medium"
@@ -500,6 +472,36 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                       <Plus size={16} /> 手动添加
                   </button>
               )}
+              
+              {vocabulary.length === 0 && (
+                  <div className="text-center py-8 text-slate-400 text-sm">
+                      暂无单词。试试 AI 导入!
+                  </div>
+              )}
+              
+              {vocabulary.length > 0 && filteredVocabulary.length === 0 && (
+                  <div className="text-center py-8 text-slate-400 text-sm">
+                      未找到匹配的单词。
+                  </div>
+              )}
+
+              {filteredVocabulary.map((item) => (
+              <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 group hover:border-indigo-300 transition-colors relative">
+                  <div className="flex justify-between items-start">
+                  <div>
+                      <p className="font-bold text-slate-800">{item.word}</p>
+                      <p className="text-xs text-slate-500 italic">{item.partOfSpeech}</p>
+                  </div>
+                  <button 
+                      onClick={() => handleDelete(item.id)}
+                      className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
+                  >
+                      <Trash2 size={16} />
+                  </button>
+                  </div>
+                  <p className="text-sm text-slate-600 mt-1">{item.definition}</p>
+              </div>
+              ))}
           </div>
       )}
     </div>
