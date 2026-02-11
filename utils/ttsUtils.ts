@@ -41,7 +41,10 @@ export const loadVoices = async (useEdge: boolean): Promise<AppVoice[]> => {
   if (useEdge) {
       try {
           if (edgeVoices.length === 0) {
-            edgeVoices = await getEdgeVoices();
+            // Add a small timeout to not block UI if network is bad
+            const edgePromise = getEdgeVoices();
+            const timeoutPromise = new Promise<any[]>((resolve) => setTimeout(() => resolve([]), 2000));
+            edgeVoices = await Promise.race([edgePromise, timeoutPromise]);
           }
           edgeVoices.forEach(v => {
               appVoices.push({
@@ -81,6 +84,34 @@ export const loadVoices = async (useEdge: boolean): Promise<AppVoice[]> => {
   return appVoices;
 };
 
+// Internal helper to play native TTS
+const playNative = (text: string, voiceId?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Find native voice
+        if (voiceId) {
+          const selected = nativeVoices.find(v => v.voiceURI === voiceId);
+          if (selected) utterance.voice = selected;
+        }
+    
+        // Auto-select best native English voice if no specific voice
+        if (!utterance.voice) {
+            const best = nativeVoices.find(v => v.name.includes("Google") && v.lang.startsWith("en-US")) || 
+                         nativeVoices.find(v => v.lang.startsWith("en"));
+            if (best) utterance.voice = best;
+        }
+    
+        utterance.onend = () => resolve();
+        utterance.onerror = (e) => {
+            console.error("Native TTS Error", e);
+            resolve(); // Resolve anyway to not break UI state
+        };
+        
+        window.speechSynthesis.speak(utterance);
+    });
+};
+
 export const speakText = async (text: string, voiceId?: string): Promise<void> => {
   stopSpeaking(); // Stop any current audio
 
@@ -90,10 +121,24 @@ export const speakText = async (text: string, voiceId?: string): Promise<void> =
 
   if (isEdgeVoice && voiceId) {
       try {
-          if (!audioContext) audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-          if (audioContext.state === 'suspended') await audioContext.resume();
+          // CRITICAL FOR MOBILE: Initialize and Resume AudioContext IMMEDIATELY upon user gesture.
+          // Do not wait for the network request to finish.
+          if (!audioContext) {
+              audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          }
+          
+          if (audioContext.state === 'suspended') {
+              await audioContext.resume();
+          }
 
-          const buffer = await speakWithEdge(text, voiceId);
+          // Create a timeout race. If Edge takes > 5 seconds, fallback to native.
+          // This prevents the "silent button" issue on bad mobile networks.
+          const bufferPromise = speakWithEdge(text, voiceId);
+          const timeoutPromise = new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error("Edge TTS Timeout")), 5000)
+          );
+
+          const buffer = await Promise.race([bufferPromise, timeoutPromise]);
           
           const source = audioContext.createBufferSource();
           source.buffer = buffer;
@@ -109,37 +154,14 @@ export const speakText = async (text: string, voiceId?: string): Promise<void> =
               source.start(0);
           });
       } catch (e) {
-          console.error("Edge TTS failed, falling back to native", e);
-          // Fallback logic below...
+          console.error("Edge TTS failed/timed out, falling back to native.", e);
+          // If Edge fails, immediately fall back to native without user knowing
+          return playNative(text);
       }
   }
 
-  // Native Fallback
-  return new Promise((resolve, reject) => {
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Find native voice
-    if (voiceId) {
-      const selected = nativeVoices.find(v => v.voiceURI === voiceId);
-      if (selected) utterance.voice = selected;
-    }
-
-    // Auto-select best native English voice if no specific voice or if Edge failed
-    if (!utterance.voice) {
-        const best = nativeVoices.find(v => v.name.includes("Google") && v.lang.startsWith("en-US")) || 
-                     nativeVoices.find(v => v.lang.startsWith("en"));
-        if (best) utterance.voice = best;
-    }
-
-    utterance.onend = () => resolve();
-    utterance.onerror = (e) => {
-        console.error(e);
-        // Don't reject, just resolve to allow flow to continue
-        resolve(); 
-    };
-    
-    window.speechSynthesis.speak(utterance);
-  });
+  // Direct Native Call
+  return playNative(text, voiceId);
 };
 
 export const stopSpeaking = () => {

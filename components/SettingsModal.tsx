@@ -1,13 +1,12 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
-import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff } from 'lucide-react';
+import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy } from 'lucide-react';
 import { loadVoices, AppVoice } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.2"; // Must match metadata.json
+const APP_VERSION = "1.0.5"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -201,6 +200,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       return 0;
   };
 
+  const copyUpdateCommand = () => {
+      const cmd = "git pull && npm run build";
+      navigator.clipboard.writeText(cmd).then(() => {
+          alert("Command copied!\n\nIMPORTANT for Termux Users:\n1. Switch to Termux window.\n2. Tap 'CTRL' then 'C' to stop the running server.\n3. Long press to Paste this command.\n4. After it finishes, run 'npm start' or 'npm run dev' again.");
+      });
+  };
+
   // --- Local File Export/Import ---
   const handleExportLocal = () => {
       const backupData: BackupData = {
@@ -281,6 +287,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               next.apiKey = bSettings.apiKey || next.apiKey;
               next.baseUrl = bSettings.baseUrl || next.baseUrl;
               next.selectedModel = bSettings.selectedModel || next.selectedModel;
+              next.vocabularyModel = bSettings.vocabularyModel || next.vocabularyModel || "gemini-2.0-flash";
               next.summaryApiKey = bSettings.summaryApiKey || next.summaryApiKey;
               next.summaryBaseUrl = bSettings.summaryBaseUrl || next.summaryBaseUrl;
               next.summaryModel = bSettings.summaryModel || next.summaryModel;
@@ -381,7 +388,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                         >
                             {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
-                            {updateStatus === 'checking' ? 'Checking...' : 'Check Public Repo Updates'}
+                            {updateStatus === 'checking' ? 'Check Updates' : 'Check for Updates'}
                         </button>
                         
                         <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
@@ -391,25 +398,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {updateStatus !== 'idle' && updateStatus !== 'checking' && (
-                    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600">
+                    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600 animate-in fade-in slide-in-from-top-1">
                         <div className="flex justify-between text-xs text-slate-400 mb-2 border-b border-slate-700 pb-2">
                             <span>Local: <strong>v{APP_VERSION}</strong></span>
                             <span>Remote: <strong>v{remoteVersion || '?'}</strong></span>
                         </div>
                         {updateStatus === 'available' && (
-                            <div className="animate-in fade-in slide-in-from-top-1">
-                                <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-1">
-                                    <Sparkles size={14} /> New Version Available
+                            <div>
+                                <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-2">
+                                    <Sparkles size={14} /> New Version Available!
                                 </div>
-                                <div className="text-xs text-slate-300 space-y-2 mt-2">
-                                    <p><strong>To Update (Termux/Local):</strong></p>
-                                    <code className="block bg-black/50 p-2 rounded font-mono text-green-300 select-all cursor-pointer" onClick={(e) => {
-                                        const target = e.target as HTMLElement;
-                                        navigator.clipboard.writeText(target.innerText);
-                                        alert("Command copied!");
-                                    }}>
-                                        cd ~/LingoLeap && git pull && npm run build
-                                    </code>
+                                <div className="bg-black/40 rounded p-2 mb-2">
+                                    <p className="text-[10px] text-slate-400 mb-1">
+                                        Termux requires stopping the server first:
+                                    </p>
+                                    <button 
+                                        onClick={copyUpdateCommand}
+                                        className="w-full flex items-center justify-between bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded transition-colors group"
+                                    >
+                                        <span className="flex items-center gap-2"><Terminal size={12}/> Copy Command</span>
+                                        <Copy size={12} className="opacity-70 group-hover:opacity-100"/>
+                                    </button>
+                                    <p className="text-[10px] text-slate-500 mt-1 italic">
+                                        Press CTRL+C in Termux to stop, then paste.
+                                    </p>
                                 </div>
                             </div>
                         )}
@@ -543,13 +555,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">Chat Model</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Chat Model (Conversation)</label>
+                        <select value={settings.selectedModel} onChange={(e) => handleChange('selectedModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm bg-white mb-2">
+                            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                            <option value="gemini-2.0-flash-thinking-exp">gemini-2.0-flash-thinking-exp</option>
+                            {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Vocabulary/Tool Model (Fast)</label>
                         <div className="relative">
-                            <select value={settings.selectedModel} onChange={(e) => handleChange('selectedModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm bg-white">
+                            <select 
+                                value={settings.vocabularyModel || "gemini-2.0-flash"} 
+                                onChange={(e) => handleChange('vocabularyModel', e.target.value)} 
+                                className="w-full p-2 rounded border border-slate-300 text-sm bg-white"
+                            >
+                                <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended)</option>
+                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
                                 <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                                {availableModels.map(m => <option key={`vocab-${m}`} value={m}>{m}</option>)}
                             </select>
+                            <p className="text-[10px] text-slate-400 mt-1">Used for Tap-to-Define and Import to ensure speed.</p>
                         </div>
                     </div>
                 </div>

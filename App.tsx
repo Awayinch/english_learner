@@ -31,6 +31,7 @@ function App() {
         baseUrl: "",
         apiKey: "", 
         selectedModel: "gemini-3-flash-preview",
+        vocabularyModel: "gemini-2.0-flash", // Default fast model
         initialGreeting: "Hello! I'm your English tutor. I've updated my Worldbook. What would you like to talk about today?"
     };
   });
@@ -308,6 +309,11 @@ function App() {
                           {isDefining ? <Loader2 size={18} className="animate-spin" /> : <BookPlus size={18} />}
                           Add to Worldbook
                       </button>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-slate-400">
+                        Using fast model: <span className="font-mono text-indigo-400">{settings.vocabularyModel || 'gemini-2.0-flash'}</span>
+                    </p>
                   </div>
               </div>
           </div>

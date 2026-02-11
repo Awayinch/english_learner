@@ -35,6 +35,10 @@ export interface Settings {
   baseUrl: string;
   apiKey: string; 
   selectedModel: string; 
+  
+  // New: Separate model for tools (Dictionary/Quiz) to ensure speed
+  vocabularyModel: string; 
+
   initialGreeting: string; 
   
   // GitHub Sync Settings

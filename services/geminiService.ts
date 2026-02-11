@@ -242,10 +242,6 @@ export const generateChatResponse = async (
       
       // Check cancel before request
       if (signal?.aborted) throw new Error("Aborted");
-
-      // Note: @google/genai SDK v1 doesn't seem to fully expose AbortSignal via generateContent config yet in all types,
-      // but we can check signal before calling. For true network abort in SDK mode, standard fetch injection is needed or library update.
-      // Proxy mode handles true network cancellation via fetch signal.
       
       const response = await ai.models.generateContent({
         model: modelName,
@@ -270,6 +266,8 @@ export const parseQuizFromText = async (
     fileData: { data: string, mimeType: string } | null,
     settings: Settings
 ): Promise<QuizQuestion[]> => {
+    // Note: Quiz also uses the selected chat model usually, or we can use the vocab model. 
+    // Let's stick to selectedModel for Quiz as it requires reasoning.
     const modelName = settings.selectedModel || "gemini-3-flash-preview";
     const prompt = `Analyze content. Generate Quiz for ${settings.level}. Output JSON: Array of {question, options[4], correctAnswerIndex(0-3), explanation(zh-CN)}. Context: "${rawText.substring(0, 1500)}"`;
 
@@ -299,19 +297,22 @@ export const parseQuizFromText = async (
 
 // --- Definition ---
 export const defineSelection = async (text: string, settings: Settings): Promise<VocabularyItem | null> => {
-    const modelName = settings.selectedModel || "gemini-3-flash-preview";
-    const prompt = `Define "${text}". Output JSON: { "word": "${text}", "definition": "Concise CN def", "partOfSpeech": "noun/verb..." }`;
+    // OPTIMIZATION: Use the user-configured Vocabulary Model (defaulting to gemini-2.0-flash)
+    const TOOL_MODEL = settings.vocabularyModel || "gemini-2.0-flash"; 
+    
+    // Short, precise prompt to save tokens and time
+    const prompt = `Define "${text}". JSON: { "word": "${text}", "definition": "Concise CN def", "partOfSpeech": "noun/verb..." }`;
 
     try {
         let resText = "";
         if (settings.baseUrl) {
             // PROXY
-            resText = await generateContentOpenAICompat(settings, modelName, [{ role: 'user', content: prompt }], true);
+            resText = await generateContentOpenAICompat(settings, TOOL_MODEL, [{ role: 'user', content: prompt }], true);
         } else {
             // SDK
             const ai = createClient(settings.apiKey, undefined);
             const response = await ai.models.generateContent({
-                model: modelName,
+                model: TOOL_MODEL,
                 contents: [{ parts: [{ text: prompt }] }],
                 config: { responseMimeType: "application/json" }
             });
@@ -333,7 +334,8 @@ export const processVocabularyFromText = async (
     settings: Settings,
     signal?: AbortSignal
 ): Promise<VocabularyItem[]> => {
-    const modelName = settings.selectedModel || "gemini-3-flash-preview";
+    // Use Vocabulary Model for Import as well to be faster
+    const modelName = settings.vocabularyModel || "gemini-2.0-flash";
     const prompt = `Extract difficult vocab. Output JSON Array: [{ "word": "...", "definition": "CN def", "partOfSpeech": "..." }]. Text: "${rawText.substring(0, 4000)}"`;
 
     if (settings.baseUrl) {
