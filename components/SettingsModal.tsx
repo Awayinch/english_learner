@@ -1,10 +1,15 @@
 
 import React, { useEffect, useState } from 'react';
 import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
-import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square } from 'lucide-react';
+import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink } from 'lucide-react';
 import { loadVoices } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
+
+// We import metadata for the local version
+// In a real build, this might be imported differently, but this works for this structure.
+// Assuming metadata.json is fetchable or we hardcode the check logic.
+const APP_VERSION = "1.0.0"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -55,6 +60,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [cloudStatus, setCloudStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [cloudMsg, setCloudMsg] = useState('');
   
+  // Update Check State
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
+  const [remoteVersion, setRemoteVersion] = useState('');
+
   // Restore / Preview State
   const [backupPreview, setBackupPreview] = useState<BackupData | null>(null);
   const [restoreSelection, setRestoreSelection] = useState<RestoreSelection>({
@@ -86,6 +95,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (!isOpen) {
           setBackupPreview(null);
           setCloudStatus('idle');
+          setUpdateStatus('idle');
       }
   }, [isOpen]);
 
@@ -124,6 +134,42 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       } finally {
           setIsTesting(false);
       }
+  };
+
+  // --- Update Checker ---
+  const handleCheckForUpdates = async () => {
+      setUpdateStatus('checking');
+      try {
+          // Fetch the package.json from the main repository
+          const res = await fetch('https://raw.githubusercontent.com/awayinch/LingoLeap/main/metadata.json?t=' + Date.now());
+          if (!res.ok) throw new Error("Could not reach update server.");
+          
+          const remoteMeta = await res.json();
+          const rVersion = remoteMeta.version;
+          setRemoteVersion(rVersion);
+
+          if (compareVersions(rVersion, APP_VERSION) > 0) {
+              setUpdateStatus('available');
+          } else {
+              setUpdateStatus('uptodate');
+          }
+      } catch (e) {
+          console.error(e);
+          setUpdateStatus('error');
+      }
+  };
+
+  // Simple semver comparison: 1 if v1 > v2, -1 if v1 < v2, 0 if equal
+  const compareVersions = (v1: string, v2: string) => {
+      const parts1 = v1.split('.').map(Number);
+      const parts2 = v2.split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+          const p1 = parts1[i] || 0;
+          const p2 = parts2[i] || 0;
+          if (p1 > p2) return 1;
+          if (p1 < p2) return -1;
+      }
+      return 0;
   };
 
   // --- Cloud Logic ---
@@ -276,6 +322,66 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+
+            {/* App Info & Update Section */}
+            <div className="bg-slate-800 text-slate-200 p-4 rounded-xl shadow-lg border border-slate-700">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 font-bold text-white">
+                        <Smartphone size={20} />
+                        <h3>App Info</h3>
+                    </div>
+                    <span className="text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600">v{APP_VERSION}</span>
+                </div>
+                
+                <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                    To install as a mobile app: Tap your browser menu (Chrome/Safari) and select <strong>"Add to Home Screen"</strong>.
+                </p>
+
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleCheckForUpdates}
+                        disabled={updateStatus === 'checking'}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                        {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
+                        {updateStatus === 'checking' ? 'Checking...' : 'Check GitHub Updates'}
+                    </button>
+                    
+                    <a href="https://github.com/awayinch/LingoLeap" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
+                        <ExternalLink size={16} />
+                    </a>
+                </div>
+
+                {updateStatus === 'available' && (
+                    <div className="mt-3 p-3 bg-indigo-900/50 border border-indigo-500/50 rounded-lg animate-in fade-in slide-in-from-top-1">
+                        <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-1">
+                            <Sparkles size={14} /> New Version Available: v{remoteVersion}
+                        </div>
+                        <div className="text-xs text-slate-300 space-y-2">
+                            <p>If running on Termux/Local, run:</p>
+                            <code className="block bg-black/50 p-2 rounded font-mono text-green-300 select-all cursor-pointer" onClick={(e) => {
+                                const target = e.target as HTMLElement;
+                                navigator.clipboard.writeText(target.innerText);
+                                alert("Command copied!");
+                            }}>
+                                git pull && npm run build
+                            </code>
+                            <p>If running on Web/Vercel: Just refresh the page.</p>
+                        </div>
+                    </div>
+                )}
+
+                {updateStatus === 'uptodate' && (
+                    <div className="mt-3 text-xs text-green-400 flex items-center gap-2">
+                        <CheckCircle size={12} /> You are on the latest version.
+                    </div>
+                )}
+                 {updateStatus === 'error' && (
+                    <div className="mt-3 text-xs text-red-400 flex items-center gap-2">
+                        <AlertCircle size={12} /> Could not fetch update info.
+                    </div>
+                )}
+            </div>
 
            {/* Cloud Sync Section */}
            <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-100">
