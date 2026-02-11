@@ -6,7 +6,7 @@ LingoLeap is an immersive, personalized language learning web application powere
 Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.6-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.9-green.svg)
 ![Powered By](https://img.shields.io/badge/AI-Google%20Gemini-orange)
 
 ## ✨ Key Features
@@ -35,7 +35,34 @@ Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ---
 
-## 🚀 Getting Started
+## 📱 Mobile Usage (Termux) - 懒人版指南
+
+你可以使用 Android 手机上的 Termux 运行此应用。
+
+### 1. 首次安装指令（一条龙复制）
+这段代码会自动配置环境、下载代码、安装依赖并运行。
+
+```bash
+pkg update -y && pkg upgrade -y && pkg install git nodejs -y && git clone https://github.com/Awayinch/english_learner.git && cd english_learner && chmod +x start.sh && ./start.sh
+```
+
+*(如果 git clone 失败，请确保开启了加速器，或配置了 GitHub 镜像)*
+
+### 2. 以后每次启动的最短指令
+以后打开 Termux，只需要输入下面这一行：
+
+```bash
+cd english_learner && ./start.sh
+```
+
+**原理说明：**
+*   `chmod +x start.sh`: 赋予脚本执行权限。
+*   `./start.sh`: 自动执行 `npm install` (依赖检查), `npm run build` (编译) 和 `npx serve` (启动服务器)。
+*   **端口隔离**: 强制指定 3000 端口，与 SillyTavern (8000) 等其他服务互不冲突。
+
+---
+
+## 🚀 Getting Started (PC/Dev)
 
 ### Prerequisites
 - Node.js (v18 or higher)
@@ -88,19 +115,6 @@ To sync data between your Phone and PC, LingoLeap uses GitHub's API.
 4. **Usage**:
    - Click **"Backup Current Data"** to save your state.
    - On a new device, click **"Fetch Backup & Preview"** to restore.
-
----
-
-## 📱 Mobile Usage (Termux)
-
-You can run this strictly locally on Android using Termux:
-
-1. Install Termux.
-2. Run: `pkg install nodejs git`
-3. Clone repo and install dependencies.
-4. Run: `npm run build` then `npx serve -s dist` (or `build`).
-5. Open `localhost:3000` in your mobile browser.
-6. Use **Cloud Sync** to restore data from your PC.
 
 ---
 
