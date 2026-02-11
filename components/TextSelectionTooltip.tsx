@@ -61,7 +61,7 @@ const TextSelectionTooltip: React.FC<TextSelectionTooltipProps> = ({ settings, o
         className="flex items-center gap-1 hover:text-indigo-300 text-xs font-medium transition-colors whitespace-nowrap"
       >
         <ListPlus size={14} />
-        Add to Queue
+        加入队列
       </button>
       
       {/* Arrow */}

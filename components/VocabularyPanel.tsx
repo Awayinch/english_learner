@@ -91,7 +91,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
-        setStatusLog(prev => [...prev, "🛑 Operation cancelled by user."]);
+        setStatusLog(prev => [...prev, "🛑 用户取消操作。"]);
         setIsProcessing(false);
     }
   };
@@ -99,7 +99,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const handleSyncToGithub = async () => {
     if (!settings.githubToken || !settings.githubRepo) {
         setSyncStatus('error');
-        setSyncMsg("Setup GitHub in Settings first.");
+        setSyncMsg("请先在设置中配置 GitHub。");
         setTimeout(() => setSyncStatus('idle'), 3000);
         return;
     }
@@ -117,10 +117,10 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
         await syncToGithub(settings, filename, contentWithHeader);
 
         setSyncStatus('success');
-        setSyncMsg("Synced to Obsidian!");
+        setSyncMsg("已同步至 Obsidian!");
     } catch (e: any) {
         setSyncStatus('error');
-        setSyncMsg(e.message || "Sync failed");
+        setSyncMsg(e.message || "同步失败");
     } finally {
         setIsSyncing(false);
         setTimeout(() => setSyncStatus('idle'), 5000);
@@ -131,12 +131,12 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const handleProcessPending = async () => {
       if (pendingWords.length === 0) return;
       if (!settings.apiKey && !process.env.API_KEY) {
-        alert("Please configure your API Key in Settings first.");
+        alert("请先在设置中配置 API Key。");
         return;
       }
 
       setIsProcessing(true);
-      setStatusLog(["🚀 Processing Pending Queue...", `📡 Using: ${settings.baseUrl ? 'Proxy' : 'Official API'}`]);
+      setStatusLog(["🚀 正在处理待查队列...", `📡 使用通道: ${settings.baseUrl ? '代理' : '官方 API'}`]);
       
       abortControllerRef.current = new AbortController();
       
@@ -145,14 +145,14 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
           const items = await defineVocabularyBatch(pendingWords, settings, abortControllerRef.current.signal);
           if (items.length > 0) {
               setVocabulary(prev => [...prev, ...items]);
-              setStatusLog(prev => [...prev, `✅ Added ${items.length} words.`]);
+              setStatusLog(prev => [...prev, `✅ 已添加 ${items.length} 个单词。`]);
               setPendingWords([]); // Clear queue on success
           } else {
-              setStatusLog(prev => [...prev, `⚠️ No valid definitions found.`]);
+              setStatusLog(prev => [...prev, `⚠️ 未找到有效定义。`]);
           }
       } catch (err: any) {
           if (!err.message.includes('Aborted')) {
-             setStatusLog(prev => [...prev, `❌ Error: ${err.message}`]);
+             setStatusLog(prev => [...prev, `❌ 错误: ${err.message}`]);
           }
       } finally {
           setIsProcessing(false);
@@ -170,12 +170,12 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     if (!importText.trim()) return;
     
     if (!settings.apiKey && !process.env.API_KEY) {
-        alert("Please configure your API Key in Settings first.");
+        alert("请先在设置中配置 API Key。");
         return;
     }
 
     setIsProcessing(true);
-    setStatusLog(["🚀 Starting batch processing...", `📡 Using: ${settings.baseUrl ? 'Proxy/Custom URL' : 'Official Google API'}`]);
+    setStatusLog(["🚀 开始批量处理...", `📡 使用通道: ${settings.baseUrl ? '代理/自定义 URL' : '官方 Google API'}`]);
     
     const lines = importText.split('\n').filter(l => l.trim().length > 0);
     const BATCH_SIZE = 15; 
@@ -191,7 +191,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
             const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
             const chunk = lines.slice(i, i + BATCH_SIZE).join('\n');
             
-            setStatusLog(prev => [...prev, `⏳ Processing batch ${batchIndex}/${totalBatches}...`]);
+            setStatusLog(prev => [...prev, `⏳ 正在处理第 ${batchIndex}/${totalBatches} 批...`]);
             
             try {
                 // This function respects settings.baseUrl (Proxy) internally
@@ -199,26 +199,26 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                 if (items.length > 0) {
                     setVocabulary(prev => [...prev, ...items]);
                     addedCount += items.length;
-                    setStatusLog(prev => [...prev, `✅ Batch ${batchIndex}: Found ${items.length} words.`]);
+                    setStatusLog(prev => [...prev, `✅ 第 ${batchIndex} 批: 发现 ${items.length} 个单词。`]);
                 } else {
-                     setStatusLog(prev => [...prev, `⚠️ Batch ${batchIndex}: No words found.`]);
+                     setStatusLog(prev => [...prev, `⚠️ 第 ${batchIndex} 批: 未发现生词。`]);
                 }
             } catch (err: any) {
                 if (err.message.includes('cancelled') || err.message.includes('Aborted')) {
                     throw err; 
                 }
-                setStatusLog(prev => [...prev, `❌ Batch ${batchIndex} Error: ${err.message}`]);
+                setStatusLog(prev => [...prev, `❌ 第 ${batchIndex} 批错误: ${err.message}`]);
             }
             
             setProgress({ current: batchIndex, total: totalBatches });
         }
         
-        setStatusLog(prev => [...prev, `🎉 Done! Added ${addedCount} total words.`]);
+        setStatusLog(prev => [...prev, `🎉 完成! 共添加 ${addedCount} 个单词。`]);
         setImportText('');
     } catch (e: any) {
         if (e.message.includes('cancelled') || e.message.includes('Aborted')) {
         } else {
-             setStatusLog(prev => [...prev, `❌ System Error: ${e.message}`]);
+             setStatusLog(prev => [...prev, `❌ 系统错误: ${e.message}`]);
         }
     } finally {
         setIsProcessing(false);
@@ -245,13 +245,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white">
         <h2 className="font-semibold text-lg flex items-center gap-2">
           {activeTab === 'words' ? <BookOpen size={20} /> : <NotebookPen size={20} />}
-          {activeTab === 'words' ? 'Worldbook' : 'Memory Pad'}
+          {activeTab === 'words' ? '生词本 (Worldbook)' : '记忆板 (Memory)'}
         </h2>
         <div className="flex gap-2">
             <button 
                 onClick={handleSyncToGithub} 
                 className={`p-1 rounded hover:bg-indigo-500 transition-colors relative ${!settings.githubToken ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Sync to Obsidian (GitHub)"
+                title="同步到 Obsidian (GitHub)"
                 disabled={isSyncing || !settings.githubToken}
             >
                 {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <Cloud size={20} />}
@@ -275,13 +275,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
              onClick={() => setActiveTab('words')}
              className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'words' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
           >
-              Words
+              单词 (Words)
           </button>
           <button 
              onClick={() => setActiveTab('memory')}
              className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'memory' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
           >
-              Memory Notes
+              记忆笔记 (Memory)
           </button>
       </div>
 
@@ -289,16 +289,16 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
           <div className="flex-1 p-4 bg-slate-50 flex flex-col">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800 flex items-start gap-2">
                   <Sparkles size={14} className="mt-0.5 shrink-0" />
-                  <p>Content here is <strong>automatically injected</strong> into the AI's system prompt. Use it to store your background, learning goals, or previous conversation topics.</p>
+                  <p>此处的内容会<strong>自动注入</strong>到 AI 的系统提示词中。用它来记录你的背景、学习目标或之前的话题。</p>
               </div>
               <textarea 
                   className="flex-1 w-full p-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none resize-none text-sm font-mono leading-relaxed shadow-inner"
-                  placeholder="e.g. I am 25 years old. I work as a software engineer. My goal is to improve business English..."
+                  placeholder="例如：我25岁，是一名软件工程师。我的目标是提高商务英语..."
                   value={settings.longTermMemory || ''}
                   onChange={(e) => setSettings(prev => ({ ...prev, longTermMemory: e.target.value }))}
               />
               <div className="mt-2 text-xs text-slate-400 text-right flex items-center justify-end gap-1">
-                  <Save size={12} /> Auto-saved locally
+                  <Save size={12} /> 本地自动保存
               </div>
           </div>
       ) : (
@@ -306,7 +306,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
           <>
             <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0">
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Target Level
+                    当前难度
                 </label>
                 <select 
                     value={level} 
@@ -324,7 +324,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                 <div className="p-4 bg-indigo-50 border-b border-indigo-100 shrink-0">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-xs font-bold text-indigo-800 flex items-center gap-2 uppercase tracking-wide">
-                           <ListPlus size={14} /> Pending Query Queue ({pendingWords.length})
+                           <ListPlus size={14} /> 待查询队列 ({pendingWords.length})
                         </h3>
                         {isProcessing && <Loader2 size={14} className="animate-spin text-indigo-600"/>}
                     </div>
@@ -349,14 +349,14 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                             className="px-3 py-1.5 bg-white border border-slate-200 text-slate-500 rounded text-xs font-medium hover:text-red-600 hover:border-red-200"
                             disabled={isProcessing}
                         >
-                            Clear
+                            清空
                         </button>
                         <button 
                             onClick={handleProcessPending}
                             className="flex-1 px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-bold hover:bg-indigo-700 shadow-sm flex items-center justify-center gap-2"
                             disabled={isProcessing}
                         >
-                           {isProcessing ? 'Processing...' : 'Start Batch Query'} <Play size={10} fill="currentColor"/>
+                           {isProcessing ? '处理中...' : '开始批量查询'} <Play size={10} fill="currentColor"/>
                         </button>
                     </div>
                     {statusLog.length > 0 && isProcessing && (
@@ -372,14 +372,14 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     <div className="flex justify-between items-center">
                         <h3 className="font-semibold text-slate-700 flex items-center gap-2">
                             <Sparkles size={16} className="text-indigo-600"/> 
-                            AI Smart Import
+                            AI 智能导入
                         </h3>
                         <button 
                             onClick={() => setIsImportMode(false)}
                             disabled={isProcessing}
                             className="text-xs text-slate-400 hover:text-slate-600 underline disabled:opacity-50"
                         >
-                            Back to List
+                            返回列表
                         </button>
                     </div>
                     
@@ -387,8 +387,8 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         <div className="flex-1 flex flex-col gap-4">
                             <div className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm">
                                 <div className="flex justify-between text-xs font-bold text-slate-600 mb-2">
-                                    <span>Progress</span>
-                                    <span>{progress.current} / {progress.total} batches</span>
+                                    <span>进度</span>
+                                    <span>{progress.current} / {progress.total} 批</span>
                                 </div>
                                 <div className="w-full bg-slate-200 rounded-full h-2 mb-4">
                                     <div 
@@ -400,7 +400,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                                     onClick={handleStopProcessing}
                                     className="w-full py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 flex items-center justify-center gap-2"
                                 >
-                                    <StopCircle size={16} /> Stop Import
+                                    <StopCircle size={16} /> 停止导入
                                 </button>
                             </div>
                             <div className="flex-1 bg-black/80 rounded-lg p-3 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
@@ -413,15 +413,15 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     ) : (
                         <>
                             <div className="text-xs text-slate-500 space-y-1">
-                                <p>Paste any text. We'll split it into batches and extract vocab.</p>
+                                <p>粘贴任意文本。我们会分批提取生词。</p>
                                 <p className="text-indigo-600 flex items-center gap-1">
                                     <Server size={10} /> 
-                                    Uses: {settings.baseUrl ? 'Custom Proxy (Configured)' : 'Official Google API'}
+                                    使用: {settings.baseUrl ? '自定义代理 (Configured)' : '官方 Google API'}
                                 </p>
                             </div>
                             <textarea
                                 className="flex-1 w-full p-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-200 outline-none text-sm resize-none"
-                                placeholder="e.g. Paste a full article here..."
+                                placeholder="例如: 在这里粘贴一整篇文章..."
                                 value={importText}
                                 onChange={(e) => setImportText(e.target.value)}
                             />
@@ -431,7 +431,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                                     disabled={!importText.trim()}
                                     className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium flex justify-center items-center gap-2"
                                 >
-                                    <Sparkles size={16} /> Start Processing
+                                    <Sparkles size={16} /> 开始处理
                                 </button>
                             </div>
                         </>
@@ -441,12 +441,12 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 pt-0">
                     <div className="sticky top-0 bg-slate-50 pt-4 pb-2 z-10">
                         <div className="flex justify-between items-center mb-2">
-                            <h3 className="text-sm font-semibold text-slate-700">Vocabulary List</h3>
+                            <h3 className="text-sm font-semibold text-slate-700">词汇列表</h3>
                             <div className="flex gap-1">
-                                <button onClick={() => setIsImportMode(true)} title="AI Import" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                <button onClick={() => setIsImportMode(true)} title="AI 智能导入" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
                                     <Upload size={16} />
                                 </button>
-                                <button onClick={handleExport} title="Export JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
+                                <button onClick={handleExport} title="导出 JSON" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
                                     <Download size={16} />
                                 </button>
                             </div>
@@ -459,7 +459,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                             </div>
                             <input 
                                 type="text"
-                                placeholder="Search words..."
+                                placeholder="搜索单词..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-9 pr-8 py-2 rounded-lg border border-slate-200 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none bg-white transition-colors"
@@ -477,13 +477,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     
                     {vocabulary.length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-sm">
-                            No words yet. Try AI Import!
+                            暂无单词。试试 AI 导入!
                         </div>
                     )}
                     
                     {vocabulary.length > 0 && filteredVocabulary.length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-sm">
-                            No matching words found.
+                            未找到匹配的单词。
                         </div>
                     )}
 
@@ -510,13 +510,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         <input
                         autoFocus
                         className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-medium"
-                        placeholder="Word"
+                        placeholder="单词 (Word)"
                         value={newWord}
                         onChange={(e) => setNewWord(e.target.value)}
                         />
                         <input
                         className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm"
-                        placeholder="Definition"
+                        placeholder="定义 (Definition)"
                         value={newDef}
                         onChange={(e) => setNewDef(e.target.value)}
                         />
@@ -525,13 +525,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                                 onClick={() => setIsAdding(false)}
                                 className="px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 rounded"
                             >
-                                Cancel
+                                取消
                             </button>
                             <button 
                                 onClick={handleAddWord}
                                 className="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
                             >
-                                Add
+                                添加
                             </button>
                         </div>
                     </div>
@@ -540,7 +540,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                             onClick={() => setIsAdding(true)}
                             className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-indigo-400 hover:text-indigo-600 flex items-center justify-center gap-2 text-sm transition-all"
                         >
-                            <Plus size={16} /> Add Manually
+                            <Plus size={16} /> 手动添加
                         </button>
                     )}
                 </div>

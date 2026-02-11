@@ -65,9 +65,9 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
         );
         setQuestions(parsed);
         if (parsed.length > 0) setStep('taking');
-        else alert("AI could not generate questions from this content. Please try clearer text or a different file.");
+        else alert("AI 无法从该内容生成问题。请尝试更清晰的文本或不同的文件。");
     } catch (e: any) {
-        alert(e.message || "Failed to generate quiz. If uploading a file, ensure it is under 20MB.");
+        alert(e.message || "生成测验失败。如果上传了文件，请确保文件小于 20MB。");
     } finally {
         setIsProcessing(false);
     }
@@ -102,10 +102,10 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-6">
                 <div className="flex items-center gap-3 mb-4 text-indigo-700">
                     <div className="p-2 bg-indigo-100 rounded-lg"><FileText size={24} /></div>
-                    <h2 className="text-xl font-bold">Import Quiz Material</h2>
+                    <h2 className="text-xl font-bold">导入测验材料</h2>
                 </div>
                 <p className="text-slate-500 text-sm mb-4">
-                    Paste text or upload a document (PDF, Image, Text). The AI will analyze it to create a graded test.
+                    粘贴文本或上传文档（PDF、图片、文本）。AI 将分析内容并生成评分测试。
                 </p>
                 
                 {/* Text Input */}
@@ -113,7 +113,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
                     className="w-full h-32 p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none mb-4 text-sm"
-                    placeholder="Enter topic, paste article text, or leave empty if uploading a file..."
+                    placeholder="输入主题，粘贴文章文本，或留空直接上传文件..."
                 />
 
                 {/* File Upload Area */}
@@ -126,8 +126,8 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
                             <div className="p-3 bg-slate-100 rounded-full text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-500 mb-2 transition-colors">
                                 <Upload size={24} />
                             </div>
-                            <p className="text-sm font-medium text-slate-600">Click to Upload File</p>
-                            <p className="text-xs text-slate-400 mt-1">Supports PDF, JPG, PNG, TXT (Max 20MB)</p>
+                            <p className="text-sm font-medium text-slate-600">点击上传文件</p>
+                            <p className="text-xs text-slate-400 mt-1">支持 PDF, JPG, PNG, TXT (最大 20MB)</p>
                             <input 
                                 type="file" 
                                 ref={fileInputRef}
@@ -167,7 +167,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-md flex justify-center items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isProcessing ? <RefreshCw className="animate-spin" /> : <Play size={20} />}
-                    {isProcessing ? 'AI is Analyzing...' : 'Generate Quiz'}
+                    {isProcessing ? 'AI 正在分析...' : '生成测验'}
                 </button>
             </div>
         </div>
@@ -179,11 +179,11 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
         <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                 <BookOpen className="text-indigo-600"/> 
-                {step === 'review' ? 'Test Results' : 'Quiz Mode'}
+                {step === 'review' ? '测验结果' : '测验模式'}
             </h2>
             {step === 'review' && (
                 <div className="bg-indigo-100 text-indigo-800 px-4 py-2 rounded-lg font-bold">
-                    Score: {score} / {questions.length}
+                    得分: {score} / {questions.length}
                 </div>
             )}
         </div>
@@ -252,7 +252,7 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
                         {showResults && (
                             <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200 text-sm">
                                 <div className="flex items-center gap-2 font-semibold text-indigo-700 mb-1">
-                                    <AlertCircle size={16} /> Explanation
+                                    <AlertCircle size={16} /> 解析 (Explanation)
                                 </div>
                                 <p className="text-slate-600 leading-relaxed">{q.explanation}</p>
                             </div>
@@ -269,14 +269,14 @@ const QuizMode: React.FC<QuizModeProps> = ({ settings }) => {
                     disabled={questions.some(q => q.userSelectedIndex === undefined)}
                     className="w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    Submit Answers <ChevronRight size={20} />
+                    提交答案 <ChevronRight size={20} />
                 </button>
             ) : (
                 <button
                     onClick={reset}
                     className="w-full sm:w-auto px-8 py-3 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl font-bold shadow-sm"
                 >
-                    Start New Quiz
+                    开始新测验
                 </button>
             )}
         </div>

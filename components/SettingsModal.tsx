@@ -6,7 +6,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.7"; // Must match metadata.json
+const APP_VERSION = "1.0.8"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -117,16 +117,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleTestConnection = async () => {
       setIsTesting(true);
       setTestStatus('none');
-      setTestMessage('Connecting...');
+      setTestMessage('连接中...');
       
       try {
           const models = await getAvailableModels(settings);
           setAvailableModels(models);
           setTestStatus('success');
           
-          const source = settings.baseUrl ? "Proxy/Custom URL" : "Google Direct";
+          const source = settings.baseUrl ? "代理/自定义 URL" : "Google 直连";
           const maskedKey = settings.apiKey ? `...${settings.apiKey.slice(-4)}` : "None";
-          setTestMessage(`Success! Found ${models.length} models via ${source}. (Key: ${maskedKey})`);
+          setTestMessage(`成功! 发现 ${models.length} 个模型 (来源: ${source}, Key: ${maskedKey})`);
           
           if (!settings.selectedModel || !models.includes(settings.selectedModel)) {
              const preferred = models.find(m => m.includes('gemini-1.5-flash')) || 
@@ -138,7 +138,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           }
       } catch (error: any) {
           setTestStatus('error');
-          setTestMessage(error.message || "Connection failed. Check Proxy/API Key.");
+          setTestMessage(error.message || "连接失败。请检查代理或 API Key。");
           setAvailableModels([]);
       } finally {
           setIsTesting(false);
@@ -166,7 +166,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                        return;
                    }
                }
-               throw new Error("Could not reach update server.");
+               throw new Error("无法连接更新服务器。");
           }
           const remoteMeta = await res.json();
           processUpdateData(remoteMeta, targetRepo);
@@ -203,7 +203,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const copyUpdateCommand = () => {
       const cmd = "git pull && npm run build";
       navigator.clipboard.writeText(cmd).then(() => {
-          alert("Command copied!\n\nIMPORTANT for Termux Users:\n1. Switch to Termux window.\n2. Tap 'CTRL' then 'C' to stop the running server.\n3. Long press to Paste this command.\n4. After it finishes, run 'npm start' or 'npm run dev' again.");
+          alert("命令已复制!\n\nTermux 用户重要提示:\n1. 切换回 Termux 窗口。\n2. 按 'CTRL' + 'C' 停止当前服务。\n3. 长按粘贴此命令。\n4. 完成后再次运行 'npm start' 或 'npm run dev'。");
       });
   };
 
@@ -235,13 +235,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           try {
               const jsonStr = event.target?.result as string;
               const data = JSON.parse(jsonStr);
-              if (!data.settings && !data.vocabulary) throw new Error("Invalid backup structure.");
+              if (!data.settings && !data.vocabulary) throw new Error("无效的备份文件结构。");
               setBackupPreview(data);
               setCloudStatus('success');
-              setCloudMsg('File loaded. Review below.');
+              setCloudMsg('文件已加载。请在下方预览。');
           } catch (err) {
               setCloudStatus('error');
-              setCloudMsg('Failed to parse JSON file.');
+              setCloudMsg('解析 JSON 文件失败。');
           }
       };
       reader.readAsText(file);
@@ -253,7 +253,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleFetchBackup = async () => {
       if (!settings.githubToken || !settings.githubRepo) {
           setCloudStatus('error');
-          setCloudMsg('Please configure GitHub Token & Repo first.');
+          setCloudMsg('请先配置 GitHub Token 和 Repo。');
           return;
       }
       setIsCloudLoading(true);
@@ -261,16 +261,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setBackupPreview(null);
       try {
           const jsonStr = await loadFromGithub(settings, 'lingoleap_backup.json');
-          if (!jsonStr) throw new Error("File 'lingoleap_backup.json' not found in repo.");
+          if (!jsonStr) throw new Error("仓库中未找到 'lingoleap_backup.json' 文件。");
           let data: BackupData;
-          try { data = JSON.parse(jsonStr); } catch (e) { throw new Error("Failed to parse backup JSON. File might be corrupted."); }
-          if (!data.settings && !data.vocabulary) throw new Error("Invalid backup format: Missing settings or vocabulary.");
+          try { data = JSON.parse(jsonStr); } catch (e) { throw new Error("解析备份 JSON 失败。文件可能已损坏。"); }
+          if (!data.settings && !data.vocabulary) throw new Error("无效的备份格式: 缺少设置或词汇表。");
           setBackupPreview(data);
           setCloudStatus('success');
-          setCloudMsg('Backup found! Review content below.');
+          setCloudMsg('找到备份! 请在下方预览内容。');
       } catch (e: any) {
           setCloudStatus('error');
-          setCloudMsg(e.message || 'Fetch failed.');
+          setCloudMsg(e.message || '获取失败。');
       } finally {
           setIsCloudLoading(false);
       }
@@ -310,14 +310,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       if (history && setMessages && backupPreview.messages) setMessages(backupPreview.messages);
 
       setCloudStatus('success');
-      setCloudMsg('Import Successful!');
+      setCloudMsg('导入成功!');
       setTimeout(() => setBackupPreview(null), 1500);
   };
 
   const handleCloudUpload = async () => {
       if (!settings.githubToken || !settings.githubRepo) {
           setCloudStatus('error');
-          setCloudMsg('Config GitHub below first.');
+          setCloudMsg('请先在下方配置 GitHub。');
           return;
       }
       setIsCloudLoading(true);
@@ -332,10 +332,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           };
           await syncToGithub(settings, 'lingoleap_backup.json', JSON.stringify(backupData, null, 2));
           setCloudStatus('success');
-          setCloudMsg('Upload Complete! Saved to GitHub.');
+          setCloudMsg('上传完成! 已保存至 GitHub。');
       } catch (e: any) {
           setCloudStatus('error');
-          setCloudMsg(e.message || 'Upload failed.');
+          setCloudMsg(e.message || '上传失败。');
       } finally {
           setIsCloudLoading(false);
       }
@@ -355,7 +355,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white rounded-t-2xl shrink-0">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <SettingsIcon size={20} />
-            Configuration
+            设置 (Configuration)
           </h2>
           <button onClick={onClose} className="hover:bg-indigo-500 p-1 rounded transition-colors">
             <X size={20} />
@@ -369,15 +369,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2 font-bold text-white">
                         <Smartphone size={20} />
-                        <h3>App Info & Updates</h3>
+                        <h3>应用信息与更新</h3>
                     </div>
                     <span className="text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600">v{APP_VERSION}</span>
                 </div>
                 
                 <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-                    <strong>To install app icon:</strong><br/>
-                    • <strong>Android (Chrome):</strong> Menu (⋮) → "Install App" or "Add to Home Screen"<br/>
-                    • <strong>iOS (Safari):</strong> Share Button → "Add to Home Screen"
+                    <strong>安装应用图标:</strong><br/>
+                    • <strong>Android (Chrome):</strong> 菜单 (⋮) → "安装应用" 或 "添加到主屏幕"<br/>
+                    • <strong>iOS (Safari):</strong> 分享按钮 → "添加到主屏幕"
                 </p>
 
                 <div className="flex flex-col gap-2">
@@ -388,7 +388,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                         >
                             {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
-                            {updateStatus === 'checking' ? 'Check Updates' : 'Check for Updates'}
+                            {updateStatus === 'checking' ? '检查中...' : '检查更新'}
                         </button>
                         
                         <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
@@ -400,33 +400,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 {updateStatus !== 'idle' && updateStatus !== 'checking' && (
                     <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600 animate-in fade-in slide-in-from-top-1">
                         <div className="flex justify-between text-xs text-slate-400 mb-2 border-b border-slate-700 pb-2">
-                            <span>Local: <strong>v{APP_VERSION}</strong></span>
-                            <span>Remote: <strong>v{remoteVersion || '?'}</strong></span>
+                            <span>本地版本: <strong>v{APP_VERSION}</strong></span>
+                            <span>远程版本: <strong>v{remoteVersion || '?'}</strong></span>
                         </div>
                         {updateStatus === 'available' && (
                             <div>
                                 <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-2">
-                                    <Sparkles size={14} /> New Version Available!
+                                    <Sparkles size={14} /> 发现新版本!
                                 </div>
                                 <div className="bg-black/40 rounded p-2 mb-2">
                                     <p className="text-[10px] text-slate-400 mb-1">
-                                        Termux requires stopping the server first:
+                                        Termux 用户需要先停止服务:
                                     </p>
                                     <button 
                                         onClick={copyUpdateCommand}
                                         className="w-full flex items-center justify-between bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded transition-colors group"
                                     >
-                                        <span className="flex items-center gap-2"><Terminal size={12}/> Copy Command</span>
+                                        <span className="flex items-center gap-2"><Terminal size={12}/> 复制更新命令</span>
                                         <Copy size={12} className="opacity-70 group-hover:opacity-100"/>
                                     </button>
                                     <p className="text-[10px] text-slate-500 mt-1 italic">
-                                        Press CTRL+C in Termux to stop, then paste.
+                                        在 Termux 中按 CTRL+C 停止，然后粘贴。
                                     </p>
                                 </div>
                             </div>
                         )}
-                        {updateStatus === 'uptodate' && <div className="text-xs text-green-400 flex items-center gap-2"><CheckCircle size={12} /> You are on the latest version.</div>}
-                        {updateStatus === 'error' && <div className="text-xs text-red-400 flex items-center gap-2"><AlertCircle size={12} /> Could not fetch update info.</div>}
+                        {updateStatus === 'uptodate' && <div className="text-xs text-green-400 flex items-center gap-2"><CheckCircle size={12} /> 已是最新版本。</div>}
+                        {updateStatus === 'error' && <div className="text-xs text-red-400 flex items-center gap-2"><AlertCircle size={12} /> 无法获取更新信息。</div>}
                     </div>
                 )}
             </div>
@@ -436,23 +436,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between text-indigo-700 font-medium">
                     <div className="flex items-center gap-2">
                         <Cloud size={18} />
-                        <h3>Data Management (Sync & Backup)</h3>
+                        <h3>数据管理 (同步与备份)</h3>
                     </div>
                 </div>
 
                 <div className="bg-white p-3 rounded-lg border border-blue-200 mb-2">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
                         <HardDrive size={16} className="text-slate-500"/>
-                        Local Storage
+                        本地存储
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
                          <button onClick={handleExportLocal} className="flex-1 py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300">
-                            <Save size={14} /> Export to File
+                            <Save size={14} /> 导出文件
                         </button>
                         <div className="flex-1 relative">
                             <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportLocal} className="hidden" />
                             <button onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300">
-                                <FolderOpen size={14} /> Restore from File
+                                <FolderOpen size={14} /> 从文件恢复
                             </button>
                         </div>
                     </div>
@@ -461,7 +461,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="bg-white p-3 rounded-lg border border-blue-200">
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
                         <Github size={16} className="text-slate-500"/>
-                        GitHub Cloud Sync
+                        GitHub 云端同步
                     </div>
                     <div className="grid grid-cols-1 gap-2 mb-2">
                         <div>
@@ -477,11 +477,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex flex-col sm:flex-row gap-2">
                             <button onClick={handleCloudUpload} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                                 {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <UploadCloud size={14} />}
-                                Sync Up
+                                上传同步
                             </button>
                             <button onClick={handleFetchBackup} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                                 {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <DownloadCloud size={14} />}
-                                Sync Down
+                                下载同步
                             </button>
                         </div>
                     )}
@@ -499,7 +499,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         {/* Preview UI Logic (Same as before) */}
                         <div className="flex justify-between items-center mb-3">
                             <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                                <FileJson size={16} /> Import Preview
+                                <FileJson size={16} /> 导入预览
                             </h4>
                             <span className="text-xs text-slate-400">{new Date(backupPreview.date).toLocaleDateString()}</span>
                         </div>
@@ -519,8 +519,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             })}
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setBackupPreview(null)} className="flex-1 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50">Cancel</button>
-                            <button onClick={handleConfirmRestore} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex justify-center items-center gap-2"><DownloadCloud size={16} /> Import Selected</button>
+                            <button onClick={() => setBackupPreview(null)} className="flex-1 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50">取消</button>
+                            <button onClick={handleConfirmRestore} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex justify-center items-center gap-2"><DownloadCloud size={16} /> 导入选中项</button>
                         </div>
                     </div>
                 )}
@@ -531,31 +531,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between text-indigo-700 font-medium">
                     <div className="flex items-center gap-2">
                         <Server size={18} />
-                        <h3>Chat AI Connection</h3>
+                        <h3>对话 AI 连接</h3>
                     </div>
                 </div>
                 
                 <div className="grid grid-cols-1 gap-3">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">API Key</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">API 密钥 (API Key)</label>
                         <input type="password" placeholder="API Key" value={settings.apiKey || ''} onChange={(e) => handleChange('apiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">Base URL</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">代理地址 (Base URL)</label>
                         <input type="text" placeholder="https://..." value={settings.baseUrl} onChange={(e) => handleChange('baseUrl', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                     
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <button onClick={handleTestConnection} disabled={isTesting || !settings.apiKey} className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 disabled:opacity-50 text-xs font-medium flex items-center gap-2 transition-colors w-full sm:w-auto justify-center">
                             {isTesting ? <RefreshCw size={14} className="animate-spin"/> : <Server size={14} />}
-                            Test Connection
+                            测试连接
                         </button>
                         {testStatus === 'success' && <span className="text-xs text-green-600 flex items-center gap-1 font-medium"><CheckCircle size={14} /> {testMessage}</span>}
                         {testStatus === 'error' && <span className="text-xs text-red-600 flex items-center gap-1 font-medium"><AlertCircle size={14} /> {testMessage}</span>}
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">Chat Model (Conversation)</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">对话模型 (Conversation)</label>
                         <select value={settings.selectedModel} onChange={(e) => handleChange('selectedModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm bg-white mb-2">
                             <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                             <option value="gemini-2.0-flash">gemini-2.0-flash</option>
@@ -565,7 +565,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">Vocabulary/Tool Model (Fast)</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">工具模型 (查词/生词本)</label>
                         <div className="relative">
                             <select 
                                 value={settings.vocabularyModel || "gemini-1.5-flash"} 
@@ -577,7 +577,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                                 {availableModels.map(m => <option key={`vocab-${m}`} value={m}>{m}</option>)}
                             </select>
-                            <p className="text-[10px] text-slate-400 mt-1">Used for Tap-to-Define and Import to ensure speed.</p>
+                            <p className="text-[10px] text-slate-400 mt-1">用于点击查词和批量导入，建议使用速度较快的模型。</p>
                         </div>
                     </div>
                 </div>
@@ -587,18 +587,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
            <div className="space-y-3">
                 <div className="pt-2 border-t border-slate-200">
                     <button className="text-xs font-medium text-indigo-600 flex items-center gap-1 hover:text-indigo-800" onClick={() => setShowSummarySettings(!showSummarySettings)}>
-                        <SettingsIcon size={12} /> {showSummarySettings ? "Hide Advanced AI Config" : "Configure Separate Summary AI"}
+                        <SettingsIcon size={12} /> {showSummarySettings ? "隐藏高级 AI 配置" : "配置独立摘要 AI"}
                     </button>
 
                     {showSummarySettings && (
                         <div className="mt-3 space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 animate-in fade-in slide-in-from-top-1">
                             {/* Summary inputs... same as before */}
                              <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">Summary API Key</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 API Key</label>
                                 <input type="password" value={settings.summaryApiKey || ''} onChange={(e) => handleChange('summaryApiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono outline-none" />
                             </div>
                              <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">Summary Base URL</label>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 Base URL</label>
                                 <input type="text" value={settings.summaryBaseUrl || ''} onChange={(e) => handleChange('summaryBaseUrl', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono outline-none" />
                             </div>
                         </div>
@@ -610,10 +610,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
            <div className="space-y-3">
                 <div className="flex items-center gap-2 text-indigo-700 font-medium">
                     <MessageSquare size={18} />
-                    <h3>Greeting & Persona</h3>
+                    <h3>问候语与人设 (Greeting & Persona)</h3>
                 </div>
-                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-16 resize-y" placeholder="Greeting..." value={settings.initialGreeting} onChange={(e) => handleChange('initialGreeting', e.target.value)} />
-                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-20 resize-y" placeholder="Persona..." value={settings.systemPersona} onChange={(e) => handleChange('systemPersona', e.target.value)} />
+                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-16 resize-y" placeholder="初始问候语 (Greeting)..." value={settings.initialGreeting} onChange={(e) => handleChange('initialGreeting', e.target.value)} />
+                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-20 resize-y" placeholder="系统人设 (System Persona)..." value={settings.systemPersona} onChange={(e) => handleChange('systemPersona', e.target.value)} />
             </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -621,7 +621,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-3">
                 <div className="flex items-center gap-2 text-indigo-700 font-medium">
                     <Mic size={18} />
-                    <h3>Voice & Level</h3>
+                    <h3>语音与难度</h3>
                 </div>
                 
                 {/* TTS Provider Toggle */}
@@ -634,23 +634,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div className="flex flex-col">
                         <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                             Use Microsoft Edge TTS
+                             使用微软 Edge 语音 (推荐)
                              {settings.useEdgeTTS ? <Wifi size={14} className="text-green-500"/> : <WifiOff size={14} className="text-slate-400"/>}
                         </span>
                         <span className="text-xs text-slate-500">
-                            {settings.useEdgeTTS ? "High quality, online (Requires Internet)" : "System default, offline"}
+                            {settings.useEdgeTTS ? "高质量，在线 (需联网)" : "系统默认，离线"}
                         </span>
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Select Voice</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">选择语音 (Select Voice)</label>
                     <select
                         value={settings.voiceName}
                         onChange={(e) => handleChange('voiceName', e.target.value)}
                         className="w-full p-2 rounded border border-slate-300 text-sm"
                     >
-                        <option value="">-- Select --</option>
+                        <option value="">-- 请选择 --</option>
                         {voiceList.map(v => (
                             <option key={v.id} value={v.id}>
                                 {v.name}
@@ -659,7 +659,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Difficulty Level</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">难度等级 (Difficulty Level)</label>
                      <select 
                         value={settings.level} 
                         onChange={(e) => handleChange('level', e.target.value as EnglishLevel)}
@@ -680,7 +680,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium w-full sm:w-auto"
             >
-                Done
+                完成
             </button>
         </div>
       </div>

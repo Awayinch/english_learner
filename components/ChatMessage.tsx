@@ -131,7 +131,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                   <button 
                       onClick={() => onDelete(message.id)}
                       className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1.5 text-slate-400 hover:text-red-500 rounded"
-                      title="Delete Message"
+                      title="删除消息"
                   >
                       <Trash2 size={14} />
                   </button>
@@ -147,7 +147,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                               }`}
                           >
                               {isPlaying ? <StopCircle size={14} /> : <Volume2 size={14} />}
-                              <span className="font-medium">{isPlaying ? 'Stop' : 'Read Aloud'}</span>
+                              <span className="font-medium">{isPlaying ? '停止' : '朗读'}</span>
                           </button>
                       </div>
                   )}

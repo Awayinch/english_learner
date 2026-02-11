@@ -1,6 +1,6 @@
 {
   "name": "LingoLeap - AI Language Tutor",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "An interactive language learning assistant that integrates vocabulary tracking, level-appropriate dialogue generation, and native text-to-speech for immersive practice.",
   "requestFramePermissions": []
 }

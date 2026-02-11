@@ -25,14 +25,14 @@ function App() {
         level: EnglishLevel.B1,
         voiceName: '', 
         useEdgeTTS: true, // Default to true for better experience
-        systemPersona: "你是一位引人入胜、乐于助人的英语导师。你解释清晰且充满耐心。",
+        systemPersona: "You are an engaging, helpful English language tutor. You explain things clearly and are patient.",
         userPersona: "",
         longTermMemory: "", 
         baseUrl: "",
         apiKey: "", 
         selectedModel: "gemini-3-flash-preview",
         vocabularyModel: "gemini-1.5-flash", // Default fast model
-        initialGreeting: "你好！我是你的英语导师。我已经更新了世界书。今天想聊点什么？"
+        initialGreeting: "Hello! I'm your English tutor. I've updated my Worldbook. What would you like to talk about today?"
     };
   });
 
@@ -146,11 +146,11 @@ function App() {
   const handleAddToQueue = (word: string) => {
       if (!word) return;
       if (pendingWords.includes(word)) {
-          showQueueToast("Already in queue");
+          showQueueToast("已在队列中");
           return;
       }
       setPendingWords(prev => [...prev, word]);
-      showQueueToast("Added to Pending Queue");
+      showQueueToast("已加入待查队列");
   }
 
   const handleUpdateSettings = (newSettings: Settings | ((prev: Settings) => Settings)) => {
@@ -186,7 +186,7 @@ function App() {
 
     if (!settings.apiKey && !process.env.API_KEY) {
         setIsSettingsOpen(true);
-        showError("Please configure your API Key in Settings first.");
+        showError("请先在设置中配置 API Key");
         return;
     }
 
@@ -232,12 +232,12 @@ function App() {
           console.log("Generation stopped by user.");
       } else {
           console.error("Failed to generate response", error);
-          showError(error.message || "Failed to generate response. Check your settings.");
+          showError(error.message || "生成失败，请检查设置。");
           
           setMessages(prev => [...prev, {
               id: Date.now().toString(),
               role: 'model',
-              text: `⚠️ Error: ${error.message || 'Connection interrupted'}. Please check your API Key/Proxy settings.`
+              text: `⚠️ 错误: ${error.message || '连接中断'}。请检查 API Key 或代理设置。`
           }]);
       }
     } finally {
@@ -294,7 +294,7 @@ function App() {
               <div className="bg-white w-full sm:w-96 p-5 rounded-t-2xl sm:rounded-2xl shadow-2xl transform transition-transform animate-in slide-in-from-bottom-4 pointer-events-auto mb-0 sm:mb-10 mx-4 flex flex-col gap-4">
                   <div className="flex justify-between items-start">
                       <div>
-                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Selected Word</p>
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">选中单词</p>
                           <h3 className="text-2xl font-bold text-slate-800 break-all">"{selectedWord}"</h3>
                       </div>
                       <button 
@@ -310,19 +310,19 @@ function App() {
                           onClick={() => speakText(selectedWord, settings.voiceName)}
                           className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
                       >
-                          <Volume2 size={18} /> Read
+                          <Volume2 size={18} /> 朗读
                       </button>
                       <button 
                           onClick={handleConfirmAddToQueue}
                           className="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md"
                       >
                           <ListPlus size={18} />
-                          Add to Queue
+                          加入待查队列
                       </button>
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] text-slate-400">
-                        Will be added to Pending Queue for batch processing.
+                        将加入队列进行批量 AI 查询。
                     </p>
                   </div>
               </div>
@@ -414,7 +414,7 @@ function App() {
                         mode === 'chat' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                    <MessageSquare size={14} /> <span className="hidden sm:inline">Chat</span>
+                    <MessageSquare size={14} /> <span className="hidden sm:inline">对话</span>
                 </button>
                 <button 
                     onClick={() => setMode('quiz')}
@@ -422,7 +422,7 @@ function App() {
                         mode === 'quiz' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}
                 >
-                    <GraduationCap size={14} /> <span className="hidden sm:inline">Quiz</span>
+                    <GraduationCap size={14} /> <span className="hidden sm:inline">测验</span>
                 </button>
             </div>
           </div>
@@ -433,7 +433,7 @@ function App() {
                 className="hidden lg:flex items-center gap-1 mr-2 hover:text-indigo-600 transition-colors"
              >
                 <BookOpen size={14} /> 
-                {vocabulary.length} <span className="hidden xl:inline">Words</span>
+                {vocabulary.length} <span className="hidden xl:inline">词</span>
              </button>
              <button 
                 onClick={() => setIsSettingsOpen(true)}
@@ -482,7 +482,7 @@ function App() {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={isLoading ? "Generating response..." : "Type your message..."}
+                    placeholder={isLoading ? "AI 正在思考..." : "输入消息..."}
                     className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none resize-none bg-slate-50 max-h-32 min-h-[50px] text-base"
                     rows={1}
                     style={{ minHeight: '52px' }}
@@ -496,13 +496,13 @@ function App() {
                             ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
                             : 'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed'
                         }`}
-                        title={isLoading ? "Stop Generation" : "Send Message"}
+                        title={isLoading ? "停止生成" : "发送消息"}
                     >
                         {isLoading ? <Square size={18} fill="currentColor" /> : <Send size={18} />}
                     </button>
                 </div>
                 <p className="text-center text-[10px] md:text-xs text-slate-400 mt-2 hidden sm:block">
-                    Highlight (Desktop) or Tap (Mobile) any text to add to Worldbook.
+                    在电脑上划词或手机上点击单词可添加到生词本。
                 </p>
                 </div>
             </>
