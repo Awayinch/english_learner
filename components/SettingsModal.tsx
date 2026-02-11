@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
-import { X, UserCog, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, Brain, History, BookOpen, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy } from 'lucide-react';
+import { X, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy, Trash2, Layout, Cpu, User, Brain } from 'lucide-react';
 import { loadVoices, AppVoice } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
@@ -36,6 +36,8 @@ interface RestoreSelection {
     persona: boolean;    // System/User Persona + Greeting
 }
 
+type SettingsTab = 'system' | 'ai' | 'persona';
+
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -46,6 +48,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   messages,
   setMessages
 }) => {
+  const [activeTab, setActiveTab] = useState<SettingsTab>('system');
   const [voiceList, setVoiceList] = useState<AppVoice[]>([]);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [isTesting, setIsTesting] = useState(false);
@@ -84,9 +87,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) {
         loadVoices(settings.useEdgeTTS).then(voices => {
             setVoiceList(voices);
-            // If current voice is not in list (e.g. switched provider), default to first
             if (settings.voiceName && !voices.some(v => v.id === settings.voiceName)) {
-                 // Try to find a good default
                  const defaultVoice = voices.find(v => v.id.includes("Guy") || v.lang === 'en-US');
                  if (defaultVoice) handleChange('voiceName', defaultVoice.id);
                  else if (voices.length > 0) handleChange('voiceName', voices[0].id);
@@ -99,12 +100,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, settings.useEdgeTTS, settings.selectedModel]);
 
-  // Clear preview when closing or successfully restoring
   useEffect(() => {
       if (!isOpen) {
           setBackupPreview(null);
           setCloudStatus('idle');
           setUpdateStatus('idle');
+          setActiveTab('system'); // Reset tab
       }
   }, [isOpen]);
 
@@ -126,7 +127,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           
           const source = settings.baseUrl ? "代理/自定义 URL" : "Google 直连";
           const maskedKey = settings.apiKey ? `...${settings.apiKey.slice(-4)}` : "None";
-          setTestMessage(`成功! 发现 ${models.length} 个模型 (来源: ${source}, Key: ${maskedKey})`);
+          setTestMessage(`成功! 发现 ${models.length} 个模型`);
           
           if (!settings.selectedModel || !models.includes(settings.selectedModel)) {
              const preferred = models.find(m => m.includes('gemini-1.5-flash')) || 
@@ -138,7 +139,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           }
       } catch (error: any) {
           setTestStatus('error');
-          setTestMessage(error.message || "连接失败。请检查代理或 API Key。");
+          setTestMessage(error.message || "连接失败，请检查设置。");
           setAvailableModels([]);
       } finally {
           setIsTesting(false);
@@ -200,10 +201,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       return 0;
   };
 
-  const copyUpdateCommand = () => {
-      const cmd = "git pull && npm run build";
-      navigator.clipboard.writeText(cmd).then(() => {
-          alert("命令已复制!\n\nTermux 用户重要提示:\n1. 切换回 Termux 窗口。\n2. 按 'CTRL' + 'C' 停止当前服务。\n3. 长按粘贴此命令。\n4. 完成后再次运行 'npm start' 或 'npm run dev'。");
+  const copyCommand = (text: string) => {
+      navigator.clipboard.writeText(text).then(() => {
+          alert("命令已复制!\n\n请切换到 Termux 窗口:\n1. 停止当前服务 (CTRL + C)。\n2. 长按粘贴并运行。");
       });
   };
 
@@ -235,13 +235,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           try {
               const jsonStr = event.target?.result as string;
               const data = JSON.parse(jsonStr);
-              if (!data.settings && !data.vocabulary) throw new Error("无效的备份文件结构。");
+              if (!data.settings && !data.vocabulary) throw new Error("无效文件。");
               setBackupPreview(data);
               setCloudStatus('success');
-              setCloudMsg('文件已加载。请在下方预览。');
+              setCloudMsg('文件已加载，请预览。');
           } catch (err) {
               setCloudStatus('error');
-              setCloudMsg('解析 JSON 文件失败。');
+              setCloudMsg('解析失败。');
           }
       };
       reader.readAsText(file);
@@ -253,7 +253,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleFetchBackup = async () => {
       if (!settings.githubToken || !settings.githubRepo) {
           setCloudStatus('error');
-          setCloudMsg('请先配置 GitHub Token 和 Repo。');
+          setCloudMsg('请先配置 GitHub。');
           return;
       }
       setIsCloudLoading(true);
@@ -261,13 +261,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setBackupPreview(null);
       try {
           const jsonStr = await loadFromGithub(settings, 'lingoleap_backup.json');
-          if (!jsonStr) throw new Error("仓库中未找到 'lingoleap_backup.json' 文件。");
+          if (!jsonStr) throw new Error("未找到备份文件。");
           let data: BackupData;
-          try { data = JSON.parse(jsonStr); } catch (e) { throw new Error("解析备份 JSON 失败。文件可能已损坏。"); }
-          if (!data.settings && !data.vocabulary) throw new Error("无效的备份格式: 缺少设置或词汇表。");
+          try { data = JSON.parse(jsonStr); } catch (e) { throw new Error("解析失败，文件可能损坏。"); }
+          if (!data.settings && !data.vocabulary) throw new Error("无效备份格式。");
           setBackupPreview(data);
           setCloudStatus('success');
-          setCloudMsg('找到备份! 请在下方预览内容。');
+          setCloudMsg('备份已找到。');
       } catch (e: any) {
           setCloudStatus('error');
           setCloudMsg(e.message || '获取失败。');
@@ -317,7 +317,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleCloudUpload = async () => {
       if (!settings.githubToken || !settings.githubRepo) {
           setCloudStatus('error');
-          setCloudMsg('请先在下方配置 GitHub。');
+          setCloudMsg('请配置 GitHub。');
           return;
       }
       setIsCloudLoading(true);
@@ -332,7 +332,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           };
           await syncToGithub(settings, 'lingoleap_backup.json', JSON.stringify(backupData, null, 2));
           setCloudStatus('success');
-          setCloudMsg('上传完成! 已保存至 GitHub。');
+          setCloudMsg('上传完成!');
       } catch (e: any) {
           setCloudStatus('error');
           setCloudMsg(e.message || '上传失败。');
@@ -345,341 +345,343 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setRestoreSelection(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const selectAll = (v: boolean) => {
-      setRestoreSelection({ connection: v, history: v, vocabulary: v, memory: v, persona: v });
-  };
+  // --- Render Sections ---
 
-  return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-[95%] sm:w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white rounded-t-2xl shrink-0">
-          <h2 className="font-semibold text-lg flex items-center gap-2">
-            <SettingsIcon size={20} />
-            设置 (Configuration)
-          </h2>
-          <button onClick={onClose} className="hover:bg-indigo-500 p-1 rounded transition-colors">
-            <X size={20} />
+  const renderSidebar = () => (
+      <div className="w-full md:w-48 flex md:flex-col gap-2 p-3 bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200 overflow-x-auto shrink-0">
+          <button 
+              onClick={() => setActiveTab('system')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'system' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+              <Layout size={18} /> 系统与数据
           </button>
-        </div>
+          <button 
+              onClick={() => setActiveTab('ai')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'ai' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+              <Cpu size={18} /> AI 与语音
+          </button>
+          <button 
+              onClick={() => setActiveTab('persona')}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${activeTab === 'persona' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+              <User size={18} /> 人设与记忆
+          </button>
+      </div>
+  );
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-
-            {/* App Info */}
+  const renderSystemTab = () => (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+            {/* App Info & Update */}
             <div className="bg-slate-800 text-slate-200 p-4 rounded-xl shadow-lg border border-slate-700">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2 font-bold text-white">
                         <Smartphone size={20} />
-                        <h3>应用信息与更新</h3>
+                        <h3>应用信息 v{APP_VERSION}</h3>
                     </div>
-                    <span className="text-xs bg-slate-700 px-2 py-1 rounded border border-slate-600">v{APP_VERSION}</span>
                 </div>
                 
-                <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-                    <strong>安装应用图标:</strong><br/>
-                    • <strong>Android (Chrome):</strong> 菜单 (⋮) → "安装应用" 或 "添加到主屏幕"<br/>
-                    • <strong>iOS (Safari):</strong> 分享按钮 → "添加到主屏幕"
-                </p>
-
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={handleCheckForUpdates}
-                            disabled={updateStatus === 'checking'}
-                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                        >
-                            {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
-                            {updateStatus === 'checking' ? '检查中...' : '检查更新'}
-                        </button>
-                        
-                        <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
-                            <ExternalLink size={16} />
-                        </a>
-                    </div>
+                <div className="flex items-center gap-3">
+                    <button 
+                        onClick={handleCheckForUpdates}
+                        disabled={updateStatus === 'checking'}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {updateStatus === 'checking' ? <Loader2 size={14} className="animate-spin" /> : <Github size={14} />}
+                        {updateStatus === 'checking' ? '检查中...' : '检查更新'}
+                    </button>
+                    <a href="https://github.com/Awayinch/english_learner" target="_blank" rel="noreferrer" className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
+                        <ExternalLink size={16} />
+                    </a>
                 </div>
 
-                {updateStatus !== 'idle' && updateStatus !== 'checking' && (
-                    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600 animate-in fade-in slide-in-from-top-1">
-                        <div className="flex justify-between text-xs text-slate-400 mb-2 border-b border-slate-700 pb-2">
-                            <span>本地版本: <strong>v{APP_VERSION}</strong></span>
-                            <span>远程版本: <strong>v{remoteVersion || '?'}</strong></span>
+                {updateStatus === 'available' && (
+                    <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600">
+                        <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-2">
+                            <Sparkles size={14} /> 发现新版本 v{remoteVersion}
                         </div>
-                        {updateStatus === 'available' && (
-                            <div>
-                                <div className="flex items-center gap-2 text-green-400 text-sm font-bold mb-2">
-                                    <Sparkles size={14} /> 发现新版本!
-                                </div>
-                                <div className="bg-black/40 rounded p-2 mb-2">
-                                    <p className="text-[10px] text-slate-400 mb-1">
-                                        Termux 用户需要先停止服务:
-                                    </p>
-                                    <button 
-                                        onClick={copyUpdateCommand}
-                                        className="w-full flex items-center justify-between bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded transition-colors group"
-                                    >
-                                        <span className="flex items-center gap-2"><Terminal size={12}/> 复制更新命令</span>
-                                        <Copy size={12} className="opacity-70 group-hover:opacity-100"/>
-                                    </button>
-                                    <p className="text-[10px] text-slate-500 mt-1 italic">
-                                        在 Termux 中按 CTRL+C 停止，然后粘贴。
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                        {updateStatus === 'uptodate' && <div className="text-xs text-green-400 flex items-center gap-2"><CheckCircle size={12} /> 已是最新版本。</div>}
-                        {updateStatus === 'error' && <div className="text-xs text-red-400 flex items-center gap-2"><AlertCircle size={12} /> 无法获取更新信息。</div>}
+                        <button 
+                            onClick={() => copyCommand("git pull && npm run build")}
+                            className="w-full flex items-center justify-between bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded transition-colors"
+                        >
+                            <span className="flex items-center gap-2"><Terminal size={12}/> 复制更新命令</span>
+                            <Copy size={12} />
+                        </button>
                     </div>
                 )}
             </div>
 
-           {/* Cloud Sync & Backup UI (Collapsed for brevity here, same as previous) */}
-           <div className="space-y-3 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <div className="flex items-center justify-between text-indigo-700 font-medium">
-                    <div className="flex items-center gap-2">
-                        <Cloud size={18} />
-                        <h3>数据管理 (同步与备份)</h3>
-                    </div>
+           {/* Data Management */}
+           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-2 text-indigo-700 font-medium mb-3">
+                    <HardDrive size={18} />
+                    <h3>备份与同步</h3>
                 </div>
 
-                <div className="bg-white p-3 rounded-lg border border-blue-200 mb-2">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-                        <HardDrive size={16} className="text-slate-500"/>
-                        本地存储
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2">
+                <div className="space-y-3">
+                    <div className="flex gap-2">
                          <button onClick={handleExportLocal} className="flex-1 py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300">
                             <Save size={14} /> 导出文件
                         </button>
                         <div className="flex-1 relative">
                             <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportLocal} className="hidden" />
                             <button onClick={() => fileInputRef.current?.click()} className="w-full py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-2 border border-slate-300">
-                                <FolderOpen size={14} /> 从文件恢复
+                                <FolderOpen size={14} /> 导入文件
                             </button>
                         </div>
                     </div>
-                </div>
-                
-                <div className="bg-white p-3 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 mb-2">
-                        <Github size={16} className="text-slate-500"/>
-                        GitHub 云端同步
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 mb-2">
-                        <div>
-                            <input type="password" placeholder="GitHub Token (ghp_...)" value={settings.githubToken || ''} onChange={(e) => handleChange('githubToken', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none" />
+                    
+                    <div className="border-t border-slate-100 pt-3">
+                        <div className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1">
+                             <Cloud size={12}/> GitHub 同步配置
                         </div>
-                        <div className="flex gap-2">
-                            <input type="text" placeholder="user/repo" value={settings.githubRepo || ''} onChange={(e) => handleChange('githubRepo', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none flex-1" />
-                            <input type="text" placeholder="Path/" value={settings.githubPath || ''} onChange={(e) => handleChange('githubPath', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono focus:ring-2 focus:ring-blue-500 outline-none flex-1" />
+                        <div className="grid gap-2 mb-2">
+                            <input type="password" placeholder="Token (ghp_...)" value={settings.githubToken || ''} onChange={(e) => handleChange('githubToken', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono outline-none" />
+                            <div className="flex gap-2">
+                                <input type="text" placeholder="user/repo" value={settings.githubRepo || ''} onChange={(e) => handleChange('githubRepo', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono outline-none flex-1" />
+                                <input type="text" placeholder="Path/" value={settings.githubPath || ''} onChange={(e) => handleChange('githubPath', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono outline-none flex-1" />
+                            </div>
                         </div>
-                    </div>
 
-                    {!backupPreview && (
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <button onClick={handleCloudUpload} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-                                {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <UploadCloud size={14} />}
-                                上传同步
-                            </button>
-                            <button onClick={handleFetchBackup} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-                                {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <DownloadCloud size={14} />}
-                                下载同步
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {cloudStatus !== 'idle' && (
-                    <div className={`text-xs px-3 py-2 rounded flex items-center gap-2 font-medium ${cloudStatus === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {cloudStatus === 'success' ? <CheckCircle size={14}/> : <AlertCircle size={14}/>}
-                        {cloudMsg}
-                    </div>
-                )}
-
-                {backupPreview && (
-                    <div className="mt-4 bg-white rounded-lg border border-indigo-100 p-4 animate-in fade-in slide-in-from-top-2 shadow-inner">
-                        {/* Preview UI Logic (Same as before) */}
-                        <div className="flex justify-between items-center mb-3">
-                            <h4 className="font-bold text-slate-700 flex items-center gap-2">
-                                <FileJson size={16} /> 导入预览
-                            </h4>
-                            <span className="text-xs text-slate-400">{new Date(backupPreview.date).toLocaleDateString()}</span>
-                        </div>
-                        <div className="space-y-2 mb-4">
-                            {['connection', 'memory', 'vocabulary', 'history', 'persona'].map((key) => {
-                                const k = key as keyof RestoreSelection;
-                                return (
-                                <div key={k} onClick={() => toggleSelection(k)} className={`flex items-center justify-between p-2 rounded cursor-pointer border ${restoreSelection[k] ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent hover:bg-slate-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        {restoreSelection[k] ? <CheckSquare className="text-indigo-600" size={18}/> : <Square className="text-slate-400" size={18}/>}
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-semibold text-slate-700 capitalize">{key}</span>
-                                        </div>
-                                    </div>
+                        {!backupPreview ? (
+                            <div className="flex gap-2">
+                                <button onClick={handleCloudUpload} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
+                                    {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <UploadCloud size={14} />}
+                                    上传云端
+                                </button>
+                                <button onClick={handleFetchBackup} disabled={isCloudLoading || !settings.githubToken} className="flex-1 py-2 px-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-xs font-medium flex items-center justify-center gap-2 disabled:opacity-50">
+                                    {isCloudLoading ? <Loader2 size={14} className="animate-spin"/> : <DownloadCloud size={14} />}
+                                    下载云端
+                                </button>
+                            </div>
+                        ) : (
+                            // Restore Preview UI
+                            <div className="bg-slate-50 rounded-lg border border-indigo-100 p-3">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-xs font-bold text-slate-700">导入预览 ({new Date(backupPreview.date).toLocaleDateString()})</span>
+                                    <button onClick={() => setBackupPreview(null)} className="text-xs text-slate-400 underline">取消</button>
                                 </div>
-                                )
-                            })}
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => setBackupPreview(null)} className="flex-1 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50">取消</button>
-                            <button onClick={handleConfirmRestore} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 flex justify-center items-center gap-2"><DownloadCloud size={16} /> 导入选中项</button>
-                        </div>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    {['connection', 'memory', 'vocabulary', 'history', 'persona'].map((key) => {
+                                        const k = key as keyof RestoreSelection;
+                                        return (
+                                        <div key={k} onClick={() => toggleSelection(k)} className={`flex items-center gap-2 p-1.5 rounded cursor-pointer border ${restoreSelection[k] ? 'bg-indigo-100 border-indigo-200' : 'bg-white border-slate-200'}`}>
+                                            {restoreSelection[k] ? <CheckSquare size={14} className="text-indigo-600"/> : <Square size={14} className="text-slate-400"/>}
+                                            <span className="text-xs font-medium capitalize">{key === 'connection' ? '设置' : key === 'history' ? '聊天' : key === 'vocabulary' ? '生词' : key === 'memory' ? '记忆' : '人设'}</span>
+                                        </div>
+                                        )
+                                    })}
+                                </div>
+                                <button onClick={handleConfirmRestore} className="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-medium flex justify-center items-center gap-2"><DownloadCloud size={14} /> 确认导入</button>
+                            </div>
+                        )}
+                        
+                         {cloudStatus !== 'idle' && (
+                            <div className={`mt-2 text-xs px-2 py-1 rounded flex items-center gap-2 font-medium ${cloudStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                {cloudStatus === 'success' ? <CheckCircle size={12}/> : <AlertCircle size={12}/>}
+                                {cloudMsg}
+                            </div>
+                        )}
                     </div>
-                )}
+                </div>
            </div>
 
-           {/* Main API Settings */}
-           <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-center justify-between text-indigo-700 font-medium">
+           {/* Uninstall Guide */}
+           <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+               <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
+                   <Trash2 size={18} />
+                   <h3>一键卸载</h3>
+               </div>
+               <p className="text-xs text-red-600 mb-2">
+                   此操作将删除所有相关文件。
+               </p>
+               <button 
+                    onClick={() => copyCommand('cd ~ && rm -rf english_learner && echo "✅ 卸载完成"')}
+                    className="w-full flex items-center justify-between bg-white border border-red-200 hover:bg-red-100 text-red-600 text-xs px-3 py-2 rounded transition-colors"
+                >
+                    <span className="flex items-center gap-2"><Terminal size={12}/> 复制卸载命令</span>
+                    <Copy size={12} />
+                </button>
+           </div>
+      </div>
+  );
+
+  const renderAITab = () => (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+           {/* API Connection */}
+           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between text-indigo-700 font-medium mb-3">
                     <div className="flex items-center gap-2">
                         <Server size={18} />
-                        <h3>对话 AI 连接</h3>
+                        <h3>AI 连接配置</h3>
                     </div>
                 </div>
                 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-3">
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">API 密钥 (API Key)</label>
-                        <input type="password" placeholder="API Key" value={settings.apiKey || ''} onChange={(e) => handleChange('apiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">API 密钥</label>
+                        <input type="password" placeholder="sk-..." value={settings.apiKey || ''} onChange={(e) => handleChange('apiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">代理地址 (Base URL)</label>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">代理地址</label>
                         <input type="text" placeholder="https://..." value={settings.baseUrl} onChange={(e) => handleChange('baseUrl', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-indigo-500 outline-none" />
                     </div>
                     
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                        <button onClick={handleTestConnection} disabled={isTesting || !settings.apiKey} className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 disabled:opacity-50 text-xs font-medium flex items-center gap-2 transition-colors w-full sm:w-auto justify-center">
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleTestConnection} disabled={isTesting || !settings.apiKey} className="px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded hover:bg-slate-200 disabled:opacity-50 text-xs font-medium flex items-center gap-2 transition-colors">
                             {isTesting ? <RefreshCw size={14} className="animate-spin"/> : <Server size={14} />}
                             测试连接
                         </button>
-                        {testStatus === 'success' && <span className="text-xs text-green-600 flex items-center gap-1 font-medium"><CheckCircle size={14} /> {testMessage}</span>}
-                        {testStatus === 'error' && <span className="text-xs text-red-600 flex items-center gap-1 font-medium"><AlertCircle size={14} /> {testMessage}</span>}
+                        {testStatus !== 'none' && (
+                            <span className={`text-xs flex items-center gap-1 font-medium ${testStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                                {testStatus === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
+                                {testStatus === 'success' ? '连接成功' : '失败'}
+                            </span>
+                        )}
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">对话模型 (Conversation)</label>
-                        <select value={settings.selectedModel} onChange={(e) => handleChange('selectedModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm bg-white mb-2">
-                            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
-                            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                            <option value="gemini-2.0-flash-thinking-exp">gemini-2.0-flash-thinking-exp</option>
-                            {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-slate-500 mb-1">工具模型 (查词/生词本)</label>
-                        <div className="relative">
-                            <select 
-                                value={settings.vocabularyModel || "gemini-1.5-flash"} 
-                                onChange={(e) => handleChange('vocabularyModel', e.target.value)} 
-                                className="w-full p-2 rounded border border-slate-300 text-sm bg-white"
-                            >
-                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                         <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">对话模型</label>
+                            <select value={settings.selectedModel} onChange={(e) => handleChange('selectedModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs bg-white">
                                 <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                                 <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                                {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">工具模型</label>
+                            <select value={settings.vocabularyModel || "gemini-1.5-flash"} onChange={(e) => handleChange('vocabularyModel', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs bg-white">
+                                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
                                 {availableModels.map(m => <option key={`vocab-${m}`} value={m}>{m}</option>)}
                             </select>
-                            <p className="text-[10px] text-slate-400 mt-1">用于点击查词和批量导入，建议使用速度较快的模型。</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-           {/* Summary AI Config Toggle (Collapsed) */}
-           <div className="space-y-3">
-                <div className="pt-2 border-t border-slate-200">
-                    <button className="text-xs font-medium text-indigo-600 flex items-center gap-1 hover:text-indigo-800" onClick={() => setShowSummarySettings(!showSummarySettings)}>
-                        <SettingsIcon size={12} /> {showSummarySettings ? "隐藏高级 AI 配置" : "配置独立摘要 AI"}
-                    </button>
-
-                    {showSummarySettings && (
-                        <div className="mt-3 space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 animate-in fade-in slide-in-from-top-1">
-                            {/* Summary inputs... same as before */}
-                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 API Key</label>
-                                <input type="password" value={settings.summaryApiKey || ''} onChange={(e) => handleChange('summaryApiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono outline-none" />
-                            </div>
-                             <div>
-                                <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 Base URL</label>
-                                <input type="text" value={settings.summaryBaseUrl || ''} onChange={(e) => handleChange('summaryBaseUrl', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm font-mono outline-none" />
-                            </div>
-                        </div>
-                    )}
-                </div>
-           </div>
-
-           {/* Persona & Greeting Inputs (Simplified view) */}
-           <div className="space-y-3">
-                <div className="flex items-center gap-2 text-indigo-700 font-medium">
-                    <MessageSquare size={18} />
-                    <h3>问候语与人设 (Greeting & Persona)</h3>
-                </div>
-                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-16 resize-y" placeholder="初始问候语 (Greeting)..." value={settings.initialGreeting} onChange={(e) => handleChange('initialGreeting', e.target.value)} />
-                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-20 resize-y" placeholder="系统人设 (System Persona)..." value={settings.systemPersona} onChange={(e) => handleChange('systemPersona', e.target.value)} />
-            </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Voice Settings */}
-            <div className="space-y-3">
-                <div className="flex items-center gap-2 text-indigo-700 font-medium">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-2 text-indigo-700 font-medium mb-3">
                     <Mic size={18} />
-                    <h3>语音与难度</h3>
+                    <h3>语音设置</h3>
                 </div>
                 
-                {/* TTS Provider Toggle */}
                 <div 
                     onClick={() => handleChange('useEdgeTTS', !settings.useEdgeTTS)}
-                    className={`flex items-center p-3 rounded-lg cursor-pointer border transition-colors ${settings.useEdgeTTS ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}
+                    className={`flex items-center p-3 rounded-lg cursor-pointer border transition-colors mb-3 ${settings.useEdgeTTS ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-200'}`}
                 >
-                    <div className={`w-10 h-6 rounded-full p-1 transition-colors mr-3 flex-shrink-0 ${settings.useEdgeTTS ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${settings.useEdgeTTS ? 'translate-x-4' : 'translate-x-0'}`} />
+                    <div className={`w-8 h-5 rounded-full p-0.5 transition-colors mr-3 flex-shrink-0 ${settings.useEdgeTTS ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${settings.useEdgeTTS ? 'translate-x-3' : 'translate-x-0'}`} />
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                             使用微软 Edge 语音 (推荐)
-                             {settings.useEdgeTTS ? <Wifi size={14} className="text-green-500"/> : <WifiOff size={14} className="text-slate-400"/>}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                            {settings.useEdgeTTS ? "高质量，在线 (需联网)" : "系统默认，离线"}
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                             微软 Edge 语音
+                             {settings.useEdgeTTS ? <Wifi size={12} className="text-green-500"/> : <WifiOff size={12} className="text-slate-400"/>}
                         </span>
                     </div>
                 </div>
 
                 <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">选择语音 (Select Voice)</label>
-                    <select
-                        value={settings.voiceName}
-                        onChange={(e) => handleChange('voiceName', e.target.value)}
-                        className="w-full p-2 rounded border border-slate-300 text-sm"
-                    >
-                        <option value="">-- 请选择 --</option>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">选择语音</label>
+                    <select value={settings.voiceName} onChange={(e) => handleChange('voiceName', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-sm">
+                        <option value="">-- 默认 --</option>
                         {voiceList.map(v => (
-                            <option key={v.id} value={v.id}>
-                                {v.name}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">难度等级 (Difficulty Level)</label>
-                     <select 
-                        value={settings.level} 
-                        onChange={(e) => handleChange('level', e.target.value as EnglishLevel)}
-                        className="w-full p-2 rounded border border-slate-300 text-sm"
-                    >
-                        {Object.values(EnglishLevel).map((lvl) => (
-                            <option key={lvl} value={lvl}>{lvl}</option>
+                            <option key={v.id} value={v.id}>{v.name}</option>
                         ))}
                     </select>
                 </div>
             </div>
-          </div>
 
+            {/* Summary AI */}
+            <div className="pt-2">
+                <button className="text-xs font-medium text-slate-500 flex items-center gap-1 hover:text-indigo-600" onClick={() => setShowSummarySettings(!showSummarySettings)}>
+                    <SettingsIcon size={12} /> {showSummarySettings ? "隐藏独立摘要 AI" : "配置独立摘要 AI"}
+                </button>
+
+                {showSummarySettings && (
+                    <div className="mt-2 space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                         <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 API Key</label>
+                            <input type="password" value={settings.summaryApiKey || ''} onChange={(e) => handleChange('summaryApiKey', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono outline-none" />
+                        </div>
+                         <div>
+                            <label className="block text-xs font-semibold text-slate-500 mb-1">摘要 Base URL</label>
+                            <input type="text" value={settings.summaryBaseUrl || ''} onChange={(e) => handleChange('summaryBaseUrl', e.target.value)} className="w-full p-2 rounded border border-slate-300 text-xs font-mono outline-none" />
+                        </div>
+                    </div>
+                )}
+            </div>
+      </div>
+  );
+
+  const renderPersonaTab = () => (
+      <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+           {/* Greeting */}
+           <div className="space-y-1">
+                <label className="block text-xs font-bold text-indigo-700">初始问候语</label>
+                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-20 resize-none shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200" placeholder="例如: Hello! How are you today?" value={settings.initialGreeting} onChange={(e) => handleChange('initialGreeting', e.target.value)} />
+            </div>
+
+            {/* Persona */}
+            <div className="space-y-1">
+                <label className="block text-xs font-bold text-indigo-700">系统人设 (Prompt)</label>
+                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-32 resize-none shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200" placeholder="定义 AI 的性格、角色..." value={settings.systemPersona} onChange={(e) => handleChange('systemPersona', e.target.value)} />
+            </div>
+
+            {/* Long Term Memory */}
+            <div className="space-y-1">
+                 <div className="flex justify-between items-center">
+                    <label className="block text-xs font-bold text-indigo-700 flex items-center gap-1">
+                        <Brain size={12} /> 长期记忆/用户背景
+                    </label>
+                    <span className="text-[10px] text-slate-400">注入到 Prompt 中</span>
+                 </div>
+                 <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 mb-1 text-[10px] text-amber-800">
+                     在此记录你的职业、兴趣或学习目标，AI 会记住并用于对话中。
+                 </div>
+                <textarea className="w-full p-3 rounded-lg border border-slate-300 outline-none text-sm h-32 resize-none shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200" placeholder="例如: 我是程序员，想学习商务英语..." value={settings.longTermMemory || ''} onChange={(e) => handleChange('longTermMemory', e.target.value)} />
+            </div>
+            
+            <div className="pt-2 border-t border-slate-100">
+                <label className="block text-xs font-semibold text-slate-500 mb-1">难度等级</label>
+                <select value={settings.level} onChange={(e) => handleChange('level', e.target.value as EnglishLevel)} className="w-full p-2 rounded border border-slate-300 text-sm">
+                    {Object.values(EnglishLevel).map((lvl) => (
+                        <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                </select>
+            </div>
+      </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl w-[95%] sm:w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white shrink-0">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <SettingsIcon size={20} /> 设置
+          </h2>
+          <button onClick={onClose} className="hover:bg-indigo-500 p-1 rounded transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Content Area - Split View */}
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+            {renderSidebar()}
+            
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+                {activeTab === 'system' && renderSystemTab()}
+                {activeTab === 'ai' && renderAITab()}
+                {activeTab === 'persona' && renderPersonaTab()}
+            </div>
         </div>
         
-        <div className="p-4 border-t border-slate-200 flex justify-end shrink-0">
-            <button 
-                onClick={onClose}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium w-full sm:w-auto"
-            >
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-200 flex justify-end shrink-0 bg-white">
+            <button onClick={onClose} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium">
                 完成
             </button>
         </div>

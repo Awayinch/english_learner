@@ -157,10 +157,6 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       } finally {
           setIsProcessing(false);
           abortControllerRef.current = null;
-          // Auto switch to import mode if we want to show logs, or just stay here?
-          // Let's assume we show logs via an inline area if needed, 
-          // or if success, we just clear and show toast. 
-          // For now, if we have statusLogs and finished, maybe clear them after delay
           setTimeout(() => setStatusLog([]), 4000);
       }
   };
@@ -245,7 +241,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-indigo-600 text-white">
         <h2 className="font-semibold text-lg flex items-center gap-2">
           {activeTab === 'words' ? <BookOpen size={20} /> : <NotebookPen size={20} />}
-          {activeTab === 'words' ? '生词本 (Worldbook)' : '记忆板 (Memory)'}
+          {activeTab === 'words' ? '生词本' : '记忆板'}
         </h2>
         <div className="flex gap-2">
             <button 
@@ -275,13 +271,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
              onClick={() => setActiveTab('words')}
              className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'words' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
           >
-              单词 (Words)
+              单词
           </button>
           <button 
              onClick={() => setActiveTab('memory')}
              className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'memory' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-slate-500 hover:text-slate-700'}`}
           >
-              记忆笔记 (Memory)
+              记忆笔记
           </button>
       </div>
 
@@ -510,13 +506,13 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         <input
                         autoFocus
                         className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm font-medium"
-                        placeholder="单词 (Word)"
+                        placeholder="单词"
                         value={newWord}
                         onChange={(e) => setNewWord(e.target.value)}
                         />
                         <input
                         className="w-full mb-2 p-1 border-b border-slate-200 focus:border-indigo-500 outline-none text-sm"
-                        placeholder="定义 (Definition)"
+                        placeholder="定义"
                         value={newDef}
                         onChange={(e) => setNewDef(e.target.value)}
                         />
