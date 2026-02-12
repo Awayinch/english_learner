@@ -6,7 +6,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.10"; // Must match metadata.json
+const APP_VERSION = "1.0.11"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -146,31 +146,62 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       }
   };
 
-  // --- Update Checker ---
+  // --- Update Checker (Robust Mobile Fix) ---
   const handleCheckForUpdates = async () => {
       setUpdateStatus('checking');
       const officialRepo = "Awayinch/english_learner";
       let targetRepo = officialRepo;
-      if (settings.githubRepo && settings.githubRepo.includes("/")) {
+      // Safety check to ensure repo string is valid
+      if (settings.githubRepo && typeof settings.githubRepo === 'string' && settings.githubRepo.includes("/")) {
           targetRepo = settings.githubRepo;
       }
       setCheckedRepo(targetRepo);
 
-      try {
-          const res = await fetch(`https://raw.githubusercontent.com/${targetRepo}/main/metadata.json?t=${Date.now()}`);
-          if (!res.ok) {
-               if (targetRepo !== officialRepo) {
-                   const fallbackRes = await fetch(`https://raw.githubusercontent.com/${officialRepo}/main/metadata.json?t=${Date.now()}`);
-                   if (fallbackRes.ok) {
-                       const meta = await fallbackRes.json();
-                       processUpdateData(meta, officialRepo);
-                       return;
-                   }
-               }
-               throw new Error("无法连接更新服务器。");
+      // Helper function to try fetching from a URL with error handling
+      const tryFetchMetadata = async (repo: string) => {
+          // Priority 1: JSDelivr CDN (Faster, more reliable on mobile networks/China)
+          try {
+              const cdnUrl = `https://cdn.jsdelivr.net/gh/${repo}@main/metadata.json?t=${Date.now()}`;
+              const res = await fetch(cdnUrl);
+              if (res.ok) {
+                  const data = await res.json();
+                  if (data && data.version) return data;
+              }
+          } catch (e) {
+              console.warn("CDN check failed, trying raw...", e);
           }
-          const remoteMeta = await res.json();
-          processUpdateData(remoteMeta, targetRepo);
+
+          // Priority 2: Raw GitHub (Fallback)
+          try {
+              const rawUrl = `https://raw.githubusercontent.com/${repo}/main/metadata.json?t=${Date.now()}`;
+              const res = await fetch(rawUrl);
+              if (res.ok) {
+                  const data = await res.json();
+                  if (data && data.version) return data;
+              }
+          } catch (e) {
+              console.warn("Raw check failed", e);
+          }
+
+          return null;
+      };
+
+      try {
+          let remoteMeta = await tryFetchMetadata(targetRepo);
+
+          // If custom repo failed, try official repo as fallback
+          if (!remoteMeta && targetRepo !== officialRepo) {
+              remoteMeta = await tryFetchMetadata(officialRepo);
+              if (remoteMeta) {
+                  setCheckedRepo(officialRepo); 
+              }
+          }
+
+          if (remoteMeta && remoteMeta.version) {
+              processUpdateData(remoteMeta, checkedRepo);
+          } else {
+              throw new Error("无法获取版本信息");
+          }
       } catch (e) {
           console.error(e);
           setUpdateStatus('error');
@@ -178,6 +209,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const processUpdateData = (remoteMeta: any, repoName: string) => {
+      if (!remoteMeta || !remoteMeta.version) {
+          setUpdateStatus('error');
+          return;
+      }
       const rVersion = remoteMeta.version;
       setRemoteVersion(rVersion);
       setCheckedRepo(repoName);
@@ -190,8 +225,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const compareVersions = (v1: string, v2: string) => {
-      const parts1 = v1.split('.').map(Number);
-      const parts2 = v2.split('.').map(Number);
+      if (!v1 || !v2) return 0;
+      const parts1 = String(v1).split('.').map(Number);
+      const parts2 = String(v2).split('.').map(Number);
       for (let i = 0; i < 3; i++) {
           const p1 = parts1[i] || 0;
           const p2 = parts2[i] || 0;
@@ -409,6 +445,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         </button>
                     </div>
                 )}
+                
+                {updateStatus === 'uptodate' && (
+                    <div className="mt-3 p-2 bg-slate-700/30 rounded-lg border border-slate-600 flex items-center justify-center gap-2 text-slate-400 text-xs font-medium animate-in fade-in">
+                        <CheckCircle size={14} className="text-green-500" /> 当前已是最新版本
+                    </div>
+                )}
             </div>
 
            {/* Data Management */}
@@ -494,37 +536,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                </div>
 
                <div className="space-y-3">
-                   {/* Fix Repos */}
-                   <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
-                       <div className="flex items-center gap-2 text-amber-800 text-xs font-bold mb-1">
-                           <AlertCircle size={12} /> 修复 404/Repo 错误 (旧版本专用)
-                       </div>
-                       <p className="text-[10px] text-amber-700 mb-2">
-                           如果遇到 "404 Not Found" 且不想重装 App (保留数据)，请运行此修复命令。
-                       </p>
-                       <button 
-                            onClick={() => copyCommand('rm -f $PREFIX/etc/apt/sources.list.d/game.list $PREFIX/etc/apt/sources.list.d/science.list && pkg clean && pkg update -y')}
-                            className="w-full flex items-center justify-between bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 text-xs px-3 py-2 rounded transition-colors"
-                        >
-                            <span className="flex items-center gap-2">1. 修复源配置</span>
-                            <Copy size={12} />
-                        </button>
-                   </div>
-
-                   {/* Backup */}
-                   <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                       <div className="flex items-center gap-2 text-blue-800 text-xs font-bold mb-1">
-                           <Save size={12} /> 备份数据到手机存储
-                       </div>
-                       <button 
-                            onClick={() => copyCommand('termux-setup-storage && tar -zcvf /sdcard/termux-backup.tar.gz ~')}
-                            className="w-full flex items-center justify-between bg-white border border-blue-200 hover:bg-blue-100 text-blue-700 text-xs px-3 py-2 rounded transition-colors"
-                        >
-                            <span className="flex items-center gap-2">2. 打包备份 (~/ to sdcard)</span>
-                            <Copy size={12} />
-                        </button>
-                   </div>
-
                    {/* Uninstall */}
                    <div className="bg-red-50 p-3 rounded-lg border border-red-100">
                        <div className="flex items-center gap-2 text-red-800 text-xs font-bold mb-1">
@@ -534,7 +545,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() => copyCommand('cd ~ && rm -rf english_learner && echo "✅ 卸载完成"')}
                             className="w-full flex items-center justify-between bg-white border border-red-200 hover:bg-red-100 text-red-600 text-xs px-3 py-2 rounded transition-colors"
                         >
-                            <span className="flex items-center gap-2">3. 一键删除程序</span>
+                            <span className="flex items-center gap-2">一键删除程序</span>
                             <Copy size={12} />
                         </button>
                    </div>
