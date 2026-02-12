@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Volume2, X, ListPlus, CheckCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 
 // Components
 import Header from './components/Header';
@@ -8,18 +8,15 @@ import VocabularyPanel from './components/VocabularyPanel';
 import SettingsModal from './components/SettingsModal';
 import QuizMode from './components/QuizMode';
 import TextSelectionTooltip from './components/TextSelectionTooltip';
+import DefinitionModal from './components/DefinitionModal';
 
 // Store & Utils
 import { useStore } from './store/useStore';
-import { speakText } from './utils/ttsUtils';
 
 function App() {
   // Global Store State
   const { 
     settings, 
-    setSettings, 
-    setVocabulary,
-    setSessions,
     isSidebarOpen,
     setSidebarOpen,
     isSettingsOpen,
@@ -32,7 +29,7 @@ function App() {
   } = useStore();
 
   // Local UI State (Modals/Toasts)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null); 
+  const [errorMsg] = useState<string | null>(null); 
   const [queueNotification, setQueueNotification] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
 
@@ -51,12 +48,6 @@ function App() {
       setPendingWords(prev => [...prev, word]);
       showQueueToast("已加入待查队列");
   }
-
-  const handleConfirmAddToQueue = () => {
-      if (!selectedWord) return;
-      handleAddToQueue(selectedWord);
-      setSelectedWord(null);
-  };
 
   const handleWordSelect = (word: string) => {
       setSelectedWord(word);
@@ -84,43 +75,11 @@ function App() {
 
       {/* Tap-to-Define Bottom Sheet/Modal */}
       {selectedWord && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-none">
-              <div 
-                className="absolute inset-0 bg-black/20 pointer-events-auto transition-opacity"
-                onClick={() => setSelectedWord(null)}
-              ></div>
-              
-              <div className="bg-white w-full sm:w-96 p-5 rounded-t-2xl sm:rounded-2xl shadow-2xl transform transition-transform animate-in slide-in-from-bottom-4 pointer-events-auto mb-0 sm:mb-10 mx-4 flex flex-col gap-4">
-                  <div className="flex justify-between items-start">
-                      <div>
-                          <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">选中单词</p>
-                          <h3 className="text-2xl font-bold text-slate-800 break-all">"{selectedWord}"</h3>
-                      </div>
-                      <button 
-                        onClick={() => setSelectedWord(null)}
-                        className="p-1 rounded-full hover:bg-slate-100 text-slate-400"
-                      >
-                          <X size={20} />
-                      </button>
-                  </div>
-                  
-                  <div className="flex gap-3 mt-2">
-                      <button 
-                          onClick={() => speakText(selectedWord, settings.voiceName)}
-                          className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors"
-                      >
-                          <Volume2 size={18} /> 朗读
-                      </button>
-                      <button 
-                          onClick={handleConfirmAddToQueue}
-                          className="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors shadow-md"
-                      >
-                          <ListPlus size={18} />
-                          加入待查队列
-                      </button>
-                  </div>
-              </div>
-          </div>
+          <DefinitionModal 
+            selectedWord={selectedWord} 
+            onClose={() => setSelectedWord(null)}
+            onAddToQueue={handleAddToQueue}
+          />
       )}
 
       {errorMsg && (
@@ -154,10 +113,6 @@ function App() {
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        setSettings={setSettings}
-        setVocabulary={setVocabulary}
-        setSessions={setSessions}
       />
 
       {/* Main Content Area */}
