@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
-import { Smartphone, Github, Loader2, Sparkles, Terminal, Copy, CheckCircle, Save, FolderOpen, Cloud, UploadCloud, DownloadCloud, AlertCircle, CheckSquare, Square, Wrench, Trash2, ExternalLink } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Smartphone, Github, Loader2, Sparkles, Terminal, Copy, CheckCircle, Save, FolderOpen, Cloud, UploadCloud, DownloadCloud, AlertCircle, CheckSquare, Square, Wrench, Trash2, ExternalLink, Download } from 'lucide-react';
 import { useStore } from '../../store/useStore';
-import { Settings, VocabularyItem, ChatMessage, ChatSession } from '../../types';
+import { Settings, VocabularyItem, ChatMessage, ChatSession, Character } from '../../types';
 import { syncToGithub, loadFromGithub } from '../../services/githubService';
 
 // We import metadata for the local version
@@ -13,7 +13,7 @@ interface BackupData {
     settings: Settings;
     vocabulary: VocabularyItem[];
     sessions?: ChatSession[];
-    messages?: ChatMessage[];
+    characters?: Character[]; // Updated backup structure
 }
 
 interface RestoreSelection {
@@ -31,7 +31,9 @@ const SystemTab: React.FC = () => {
         vocabulary, 
         setVocabulary, 
         sessions, 
-        setSessions 
+        setSessions,
+        characters,
+        setCharacters
     } = useStore();
 
     // Update Check State
@@ -46,6 +48,18 @@ const SystemTab: React.FC = () => {
     const [backupPreview, setBackupPreview] = useState<BackupData | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     
+    // PWA Install State
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+    useEffect(() => {
+        const handler = (e: any) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handler);
+        return () => window.removeEventListener('beforeinstallprompt', handler);
+    }, []);
+    
     const [restoreSelection, setRestoreSelection] = useState<RestoreSelection>({
         connection: true,
         history: true,
@@ -53,6 +67,15 @@ const SystemTab: React.FC = () => {
         memory: true,
         persona: true
     });
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+        }
+    };
 
     // --- Update Checker ---
     const handleCheckForUpdates = async () => {
@@ -124,11 +147,12 @@ const SystemTab: React.FC = () => {
     // --- Backup & Restore Logic ---
     const handleExportLocal = () => {
         const backupData: BackupData = {
-            version: 2,
+            version: 3,
             date: new Date().toISOString(),
             settings: settings,
             vocabulary: vocabulary || [],
-            sessions: sessions || []
+            sessions: sessions || [],
+            characters: characters || []
         };
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
         const downloadAnchorNode = document.createElement('a');
@@ -194,11 +218,12 @@ const SystemTab: React.FC = () => {
         setCloudStatus('idle');
         try {
             const backupData: BackupData = {
-                version: 2,
+                version: 3,
                 date: new Date().toISOString(),
                 settings: settings,
                 vocabulary: vocabulary || [],
-                sessions: sessions || []
+                sessions: sessions || [],
+                characters: characters || []
             };
             await syncToGithub(settings, 'lingoleap_backup.json', JSON.stringify(backupData, null, 2));
             setCloudStatus('success');
@@ -228,11 +253,13 @@ const SystemTab: React.FC = () => {
                 next.summaryModel = bSettings.summaryModel || next.summaryModel;
             }
             if (memory) next.longTermMemory = bSettings.longTermMemory || "";
-            if (persona) {
+            // Legacy persona restore logic if characters array doesn't exist
+            if (persona && !backupPreview.characters) {
                 next.systemPersona = bSettings.systemPersona || next.systemPersona;
-                next.userPersona = bSettings.userPersona || next.userPersona;
                 next.initialGreeting = bSettings.initialGreeting || next.initialGreeting;
                 next.voiceName = bSettings.voiceName || next.voiceName;
+            }
+            if (persona) {
                 next.level = bSettings.level || next.level;
                 next.useEdgeTTS = bSettings.useEdgeTTS ?? next.useEdgeTTS;
             }
@@ -241,16 +268,13 @@ const SystemTab: React.FC = () => {
 
         if (restoreVocab && backupPreview.vocabulary) setVocabulary(backupPreview.vocabulary);
         
+        if (persona && backupPreview.characters) {
+            setCharacters(backupPreview.characters);
+        }
+
         if (history) {
             if (backupPreview.sessions) {
                 setSessions(backupPreview.sessions);
-            } else if (backupPreview.messages) {
-                setSessions([{
-                    id: Date.now().toString(),
-                    title: 'Restored Chat',
-                    messages: backupPreview.messages,
-                    createdAt: Date.now()
-                }]);
             }
         }
 
@@ -287,6 +311,15 @@ const SystemTab: React.FC = () => {
                         <ExternalLink size={16} />
                     </a>
                 </div>
+
+                {deferredPrompt && (
+                    <button 
+                        onClick={handleInstallClick}
+                        className="w-full mt-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-lg animate-pulse"
+                    >
+                        <Download size={14} /> 安装到桌面 (PWA)
+                    </button>
+                )}
 
                 {updateStatus === 'available' && (
                     <div className="mt-3 p-3 bg-slate-900/50 rounded-lg border border-slate-600">

@@ -11,7 +11,8 @@ export const useChatLogic = () => {
         currentSessionId, 
         updateCurrentSessionMessages,
         setSessions,
-        setSettingsOpen
+        setSettingsOpen,
+        characters // New
     } = useStore();
 
     const [input, setInput] = useState('');
@@ -19,9 +20,13 @@ export const useChatLogic = () => {
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
-    // Get current messages safely
+    // Get current session and character
     const currentSession = sessions.find(s => s.id === currentSessionId);
     const messages = currentSession?.messages || [];
+    
+    // Resolve Active Character
+    const activeCharacter = characters.find(c => c.id === currentSession?.characterId) 
+                         || characters[0]; // Fallback
 
     const showError = (msg: string) => {
         setErrorMsg(msg);
@@ -76,11 +81,13 @@ export const useChatLogic = () => {
         }));
 
         try {
+            // Pass active character to service
             const responseItems = await generateChatResponse(
                 userMsg.text,
                 history,
                 vocabulary,
                 settings,
+                activeCharacter, // Pass the character object
                 controller.signal
             );
 

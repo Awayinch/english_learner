@@ -15,7 +15,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onWordSelect }) => {
         currentSessionId, 
         vocabulary, 
         settings, 
-        updateCurrentSessionMessages 
+        updateCurrentSessionMessages,
+        characters // New
     } = useStore();
     
     const { 
@@ -31,6 +32,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onWordSelect }) => {
     
     const currentSession = sessions.find(s => s.id === currentSessionId);
     const messages = currentSession?.messages || [];
+    
+    // Resolve Voice: Use character voice if set, otherwise global setting
+    const activeChar = characters.find(c => c.id === currentSession?.characterId);
+    const activeVoice = activeChar?.voiceName || settings.voiceName;
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -48,7 +53,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onWordSelect }) => {
         stopSpeaking();
         setPlayingMessageId(messageId);
         try {
-            await speakText(text, settings.voiceName);
+            // Pass Rate/Pitch from global settings for now
+            await speakText(text, activeVoice, { rate: settings.ttsRate, pitch: settings.ttsPitch });
             setPlayingMessageId(null);
         } catch (e) {
             console.error("Playback failed", e);
@@ -79,7 +85,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onWordSelect }) => {
                             onDelete={handleDeleteMessage}
                             onWordSelect={onWordSelect}
                             playingMessageId={playingMessageId}
-                            voiceName={settings.voiceName}
+                            voiceName={activeVoice}
                         />
                     ))}
                     {isLoading && (

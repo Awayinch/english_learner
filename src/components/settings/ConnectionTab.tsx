@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Server, RefreshCw, CheckCircle, AlertCircle, Mic, Wifi, WifiOff, Settings as SettingsIcon } from 'lucide-react';
+import { Server, RefreshCw, CheckCircle, AlertCircle, Mic, Wifi, WifiOff, Settings as SettingsIcon, Gauge } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import { getAvailableModels } from '../../services/geminiService';
 import { loadVoices, AppVoice } from '../../utils/ttsUtils';
@@ -135,14 +135,50 @@ const ConnectionTab: React.FC = () => {
                     </div>
                 </div>
 
-                <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">选择语音</label>
-                    <select value={settings.voiceName} onChange={(e) => setSettings(p => ({...p, voiceName: e.target.value}))} className="w-full p-2 rounded border border-slate-300 text-sm">
-                        <option value="">-- 默认 --</option>
-                        {voiceList.map(v => (
-                            <option key={v.id} value={v.id}>{v.name}</option>
-                        ))}
-                    </select>
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">选择语音 (全局默认)</label>
+                        <select value={settings.voiceName} onChange={(e) => setSettings(p => ({...p, voiceName: e.target.value}))} className="w-full p-2 rounded border border-slate-300 text-sm">
+                            <option value="">-- 默认 --</option>
+                            {voiceList.map(v => (
+                                <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Rate and Pitch Sliders */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                             <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1"><Gauge size={12}/> 语速</label>
+                                <span className="text-xs text-indigo-600 font-mono">{settings.ttsRate > 0 ? `+${settings.ttsRate}%` : `${settings.ttsRate || 0}%`}</span>
+                             </div>
+                             <input 
+                                type="range" 
+                                min="-50" 
+                                max="50" 
+                                step="5"
+                                value={settings.ttsRate || 0} 
+                                onChange={(e) => setSettings(p => ({...p, ttsRate: parseInt(e.target.value)}))}
+                                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                             />
+                        </div>
+                        <div>
+                             <div className="flex justify-between items-center mb-1">
+                                <label className="text-xs font-semibold text-slate-500 flex items-center gap-1"><Gauge size={12}/> 语调</label>
+                                <span className="text-xs text-indigo-600 font-mono">{settings.ttsPitch > 0 ? `+${settings.ttsPitch}Hz` : `${settings.ttsPitch || 0}Hz`}</span>
+                             </div>
+                             <input 
+                                type="range" 
+                                min="-20" 
+                                max="20" 
+                                step="2"
+                                value={settings.ttsPitch || 0} 
+                                onChange={(e) => setSettings(p => ({...p, ttsPitch: parseInt(e.target.value)}))}
+                                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                             />
+                        </div>
+                    </div>
                 </div>
             </div>
 
