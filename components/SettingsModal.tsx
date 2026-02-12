@@ -150,83 +150,67 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   // --- Update Checker (Robust Mobile Fix) ---
-  // --- 🚀 终极防缓存版 (直连源站 + 强制刷新) ---
   const handleCheckForUpdates = async () => {
       setUpdateStatus('checking');
-      
       const officialRepo = "Awayinch/english_learner";
       let targetRepo = officialRepo;
-      
-      // 校验 Repo
+      // Safety check to ensure repo string is valid
       if (settings.githubRepo && typeof settings.githubRepo === 'string' && settings.githubRepo.includes("/")) {
           targetRepo = settings.githubRepo;
       }
+      setCheckedRepo(targetRepo);
 
-      // 🛠️ 定义 fetch 选项：这是强制手机不读缓存的关键！
-      const noCacheOptions: RequestInit = {
-          cache: 'no-store', // 告诉浏览器：绝对不要存，也绝对不要读缓存
-          headers: {
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Expires': '0'
+      // Helper function to try fetching from a URL with error handling
+      const tryFetchMetadata = async (repo: string) => {
+          const timestamp = Date.now();
+          const fetchOptions = { cache: 'no-store' as RequestCache }; // Force network
+
+          // Priority 1: JSDelivr CDN (Faster, more reliable on mobile networks/China)
+          try {
+              const cdnUrl = `https://cdn.jsdelivr.net/gh/${repo}@main/metadata.json?t=${timestamp}`;
+              const res = await fetch(cdnUrl, fetchOptions);
+              if (res.ok) {
+                  const data = await res.json();
+                  if (data && data.version) return data;
+              }
+          } catch (e) {
+              console.warn("CDN check failed, trying raw...", e);
           }
+
+          // Priority 2: Raw GitHub (Fallback)
+          try {
+              const rawUrl = `https://raw.githubusercontent.com/${repo}/main/metadata.json?t=${timestamp}`;
+              const res = await fetch(rawUrl, fetchOptions);
+              if (res.ok) {
+                  const data = await res.json();
+                  if (data && data.version) return data;
+              }
+          } catch (e) {
+              console.warn("Raw check failed", e);
+          }
+
+          return null;
       };
 
       try {
-          // ⚠️ 策略变更：只用 Raw GitHub，不用 CDN。
-          // 因为 CDN (jsDelivr) 有同步延迟，不适合用来检测刚发布的版本。
-          const timestamp = Date.now();
-          const url = `https://raw.githubusercontent.com/${targetRepo}/main/metadata.json?t=${timestamp}`;
+          let remoteMeta = await tryFetchMetadata(targetRepo);
 
-          console.log("正在检查更新 (强制直连):", url);
-
-          // 设置 10秒超时，防止 GitHub 在国内偶尔抽风卡死
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-          const res = await fetch(url, { 
-              ...noCacheOptions, 
-              signal: controller.signal 
-          });
-          
-          clearTimeout(timeoutId);
-
-          if (!res.ok) {
-              // 如果直连失败，再尝试一下官方仓库（作为保底）
-              if (targetRepo !== officialRepo) {
-                   console.log("自定义仓库连接失败，尝试官方仓库...");
-                   const fallbackUrl = `https://raw.githubusercontent.com/${officialRepo}/main/metadata.json?t=${timestamp}`;
-                   const fallbackRes = await fetch(fallbackUrl, { ...noCacheOptions });
-                   
-                   if (fallbackRes.ok) {
-                       const text = await fallbackRes.text();
-                       const data = JSON.parse(text);
-                       if (data && data.version) {
-                           processUpdateData(data, officialRepo);
-                           return;
-                       }
-                   }
+          // If custom repo failed, try official repo as fallback
+          if (!remoteMeta && targetRepo !== officialRepo) {
+              remoteMeta = await tryFetchMetadata(officialRepo);
+              if (remoteMeta) {
+                  setCheckedRepo(officialRepo); 
               }
-              throw new Error(`网络请求失败: ${res.status}`);
           }
 
-          // 防白屏：先取文本再解析
-          const text = await res.text();
-          let remoteMeta;
-          try {
-              remoteMeta = JSON.parse(text);
-          } catch (e) {
-              throw new Error("返回数据格式错误 (非 JSON)");
+          if (remoteMeta && remoteMeta.version) {
+              processUpdateData(remoteMeta, checkedRepo);
+          } else {
+              throw new Error("无法获取版本信息");
           }
-
-          // 处理数据
-          processUpdateData(remoteMeta, targetRepo);
-
-      } catch (e: any) {
-          console.error("更新检查失败:", e);
+      } catch (e) {
+          console.error(e);
           setUpdateStatus('error');
-          // 调试模式下可以把错误打出来，或者仅提示网络错误
-          // alert(`无法连接更新服务器: ${e.message}`); 
       }
   };
 
