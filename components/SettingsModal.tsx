@@ -6,7 +6,7 @@ import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.9"; // Must match metadata.json
+const APP_VERSION = "1.0.10"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -484,61 +484,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         )}
                     </div>
                 </div>
-           </div>
-
-           {/* Termux Toolbox */}
-           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-               <div className="flex items-center gap-2 text-slate-700 font-medium mb-3">
-                   <Wrench size={18} />
-                   <h3>Termux 维护工具箱</h3>
-               </div>
-
-               <div className="space-y-3">
-                   {/* Fix Repos */}
-                   <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
-                       <div className="flex items-center gap-2 text-amber-800 text-xs font-bold mb-1">
-                           <AlertCircle size={12} /> 修复 404/Repo 错误 (旧版本专用)
-                       </div>
-                       <p className="text-[10px] text-amber-700 mb-2">
-                           如果遇到 "404 Not Found" 且不想重装 App (保留数据)，请运行此修复命令。
-                       </p>
-                       <button 
-                            onClick={() => copyCommand('rm -f $PREFIX/etc/apt/sources.list.d/game.list $PREFIX/etc/apt/sources.list.d/science.list && pkg clean && pkg update -y')}
-                            className="w-full flex items-center justify-between bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 text-xs px-3 py-2 rounded transition-colors"
-                        >
-                            <span className="flex items-center gap-2">1. 修复源配置</span>
-                            <Copy size={12} />
-                        </button>
-                   </div>
-
-                   {/* Backup */}
-                   <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                       <div className="flex items-center gap-2 text-blue-800 text-xs font-bold mb-1">
-                           <Save size={12} /> 备份数据到手机存储
-                       </div>
-                       <button 
-                            onClick={() => copyCommand('termux-setup-storage && tar -zcvf /sdcard/termux-backup.tar.gz ~')}
-                            className="w-full flex items-center justify-between bg-white border border-blue-200 hover:bg-blue-100 text-blue-700 text-xs px-3 py-2 rounded transition-colors"
-                        >
-                            <span className="flex items-center gap-2">2. 打包备份 (~/ -> sdcard)</span>
-                            <Copy size={12} />
-                        </button>
-                   </div>
-
-                   {/* Uninstall */}
-                   <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-                       <div className="flex items-center gap-2 text-red-800 text-xs font-bold mb-1">
-                           <Trash2 size={12} /> 彻底卸载/重置
-                       </div>
-                       <button 
-                            onClick={() => copyCommand('cd ~ && rm -rf english_learner && echo "✅ 卸载完成"')}
-                            className="w-full flex items-center justify-between bg-white border border-red-200 hover:bg-red-100 text-red-600 text-xs px-3 py-2 rounded transition-colors"
-                        >
-                            <span className="flex items-center gap-2">3. 一键删除程序</span>
-                            <Copy size={12} />
-                        </button>
-                   </div>
-               </div>
            </div>
       </div>
   );
