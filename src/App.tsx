@@ -18,12 +18,8 @@ function App() {
   const { 
     settings, 
     setSettings, 
-    vocabulary, 
     setVocabulary,
-    sessions,
     setSessions,
-    currentSessionId,
-    setCurrentSessionId,
     isSidebarOpen,
     setSidebarOpen,
     isSettingsOpen,
@@ -32,19 +28,13 @@ function App() {
     pendingWords,
     setPendingWords,
     addVocabularyItem,
-    createNewSession,
-    deleteSession,
-    _hasHydrated // New Hydration Check
+    _hasHydrated
   } = useStore();
 
   // Local UI State (Modals/Toasts)
   const [errorMsg, setErrorMsg] = useState<string | null>(null); 
   const [queueNotification, setQueueNotification] = useState<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
-
-  // --- Derived State ---
-  const currentSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
-  const messages = currentSession?.messages || [];
 
   // --- Handlers ---
   const showQueueToast = (msg: string) => {
@@ -72,21 +62,7 @@ function App() {
       setSelectedWord(word);
   };
 
-  // --- Session Action Wrappers ---
-  const handleDeleteSessions = (ids: string[]) => {
-      ids.forEach(id => deleteSession(id, settings.initialGreeting));
-  };
-  
-  const handleClearSessions = () => {
-      deleteSession('all', settings.initialGreeting); 
-  };
-  
-  const handleRenameSession = (id: string, newTitle: string) => {
-      setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle.trim() || '未命名' } : s));
-  };
-
   // --- Hydration Loading Screen ---
-  // Vital for Async Storage: Prevents the UI from rendering empty/default state before DB is read
   if (!_hasHydrated) {
       return (
           <div className="h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4">
@@ -172,23 +148,6 @@ function App() {
       <VocabularyPanel 
         isOpen={isSidebarOpen} 
         onClose={() => setSidebarOpen(false)}
-        vocabulary={vocabulary}
-        setVocabulary={setVocabulary}
-        level={settings.level}
-        setLevel={(l) => setSettings(prev => ({...prev, level: l}))}
-        settings={settings}
-        messages={messages} 
-        pendingWords={pendingWords}
-        setPendingWords={setPendingWords}
-        
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        onSwitchSession={setCurrentSessionId}
-        onRenameSession={handleRenameSession}
-        onNewChat={() => createNewSession(settings.initialGreeting)}
-        onDeleteSession={(id) => deleteSession(id, settings.initialGreeting)}
-        onDeleteSessions={handleDeleteSessions}
-        onClearSessions={handleClearSessions}
       />
 
       {/* Settings Modal */}
@@ -197,9 +156,7 @@ function App() {
         onClose={() => setSettingsOpen(false)}
         settings={settings}
         setSettings={setSettings}
-        vocabulary={vocabulary}
         setVocabulary={setVocabulary}
-        sessions={sessions}
         setSessions={setSessions}
       />
 
