@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
-import { X, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy, Trash2, Layout, Cpu, User, Brain, PenTool, Wrench, Image as ImageIcon, FileText } from 'lucide-react';
+import { X, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy, Trash2, Layout, Cpu, User, Brain, PenTool, Wrench } from 'lucide-react';
 import { loadVoices, AppVoice } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.1.0"; // Must match metadata.json
+const APP_VERSION = "1.0.9"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -38,76 +38,6 @@ interface RestoreSelection {
 
 type SettingsTab = 'system' | 'ai' | 'persona';
 
-// --- Helper: Parse PNG Character Cards (Tavern Format) ---
-const readTavernCard = async (file: File): Promise<any> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                if (file.name.endsWith('.json')) {
-                    const json = JSON.parse(e.target?.result as string);
-                    resolve(json);
-                    return;
-                }
-                
-                // PNG Parsing logic for 'tEXt' chunk with 'chara' keyword
-                const buffer = e.target?.result as ArrayBuffer;
-                const view = new DataView(buffer);
-                const u8 = new Uint8Array(buffer);
-                
-                // PNG Header check (8 bytes)
-                if (u8[0] !== 137 || u8[1] !== 80 || u8[2] !== 78 || u8[3] !== 71) {
-                    reject(new Error("Not a valid PNG file"));
-                    return;
-                }
-
-                let offset = 8;
-                while (offset < view.byteLength) {
-                    const len = view.getUint32(offset);
-                    // Chunk Type
-                    const type = String.fromCharCode(u8[offset+4], u8[offset+5], u8[offset+6], u8[offset+7]);
-                    
-                    if (type === 'tEXt') {
-                        // Data start
-                        const dataStart = offset + 8;
-                        const dataEnd = dataStart + len;
-                        // Find null separator
-                        let nullIndex = -1;
-                        for(let i=dataStart; i<dataEnd; i++) {
-                            if (u8[i] === 0) { nullIndex = i; break; }
-                        }
-                        
-                        if (nullIndex > -1) {
-                            const keyword = new TextDecoder().decode(u8.slice(dataStart, nullIndex));
-                            if (keyword.toLowerCase() === 'chara') {
-                                // Found it! Decode base64
-                                const base64Text = new TextDecoder().decode(u8.slice(nullIndex + 1, dataEnd));
-                                const decodedJsonStr = window.atob(base64Text); // Standard binary string decode
-                                // The decoded string is utf-8 bytes as binary string, need to parse
-                                const jsonUtf8 = Uint8Array.from(decodedJsonStr, c => c.charCodeAt(0));
-                                const finalStr = new TextDecoder().decode(jsonUtf8);
-                                resolve(JSON.parse(finalStr));
-                                return;
-                            }
-                        }
-                    }
-                    // Move to next chunk: len + length(4) + type(4) + crc(4)
-                    offset += len + 12;
-                }
-                reject(new Error("No character data found in PNG."));
-            } catch (err) {
-                reject(err);
-            }
-        };
-        
-        if (file.name.endsWith('.json')) {
-            reader.readAsText(file);
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    });
-};
-
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
@@ -132,7 +62,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   
   // Local File States
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cardInputRef = useRef<HTMLInputElement>(null); // For Character Cards
 
   // Update Check State
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'uptodate' | 'error'>('idle');
@@ -317,37 +246,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       };
       reader.readAsText(file);
       e.target.value = ''; // Reset input
-  };
-  
-  // --- Character Card Import ---
-  const handleCardImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      
-      try {
-          const cardData = await readTavernCard(file);
-          
-          // Construct Persona from Card Data
-          // Handle V2 spec (data property) or V1 (root)
-          const data = cardData.data || cardData;
-          
-          const name = data.name || "Character";
-          const desc = data.description || "";
-          const pers = data.personality || "";
-          const scenario = data.scenario || "";
-          const firstMes = data.first_mes || data.greeting || settings.initialGreeting;
-          
-          const combinedPersona = `Name: ${name}\n\nDescription:\n${desc}\n\nPersonality:\n${pers}\n\nScenario:\n${scenario}`.trim();
-          
-          handleChange('systemPersona', combinedPersona);
-          handleChange('initialGreeting', firstMes);
-          
-          alert(`✅ 成功导入角色: ${name}`);
-      } catch (err: any) {
-          console.error(err);
-          alert(`导入失败: ${err.message || "无法解析角色卡"}`);
-      }
-      e.target.value = ''; // Reset
   };
 
   // --- Cloud Logic ---
@@ -719,7 +617,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                              微软 Edge 语音
                              {settings.useEdgeTTS ? <Wifi size={12} className="text-green-500"/> : <WifiOff size={12} className="text-slate-400"/>}
                         </span>
-                        <span className="text-[10px] text-slate-500">关闭此项以使用系统原生 TTS (Google 等)</span>
                     </div>
                 </div>
 
@@ -758,27 +655,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const renderPersonaTab = () => (
       <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-            
-           {/* Character Card Import */}
-           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-               <div className="flex items-center gap-2 text-indigo-800 font-bold text-sm mb-2">
-                   <ImageIcon size={16} /> 导入角色卡 (Tavern/SillyTavern)
-               </div>
-               <p className="text-[10px] text-indigo-600 mb-3">
-                   支持 PNG (隐写元数据) 或 JSON 格式。将自动填写下方的人设和问候语。
-               </p>
-               
-               <div className="flex gap-2">
-                   <input type="file" ref={cardInputRef} accept=".png,.json" onChange={handleCardImport} className="hidden" />
-                   <button 
-                       onClick={() => cardInputRef.current?.click()}
-                       className="w-full py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-xs font-semibold shadow-sm hover:bg-indigo-50 flex justify-center items-center gap-2"
-                   >
-                       <UploadCloud size={14} /> 上传角色卡
-                   </button>
-               </div>
-           </div>
-
            {/* Greeting */}
            <div className="space-y-1">
                 <label className="block text-xs font-bold text-indigo-700">初始问候语</label>
