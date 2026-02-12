@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Send, Sparkles, MessageSquare, Settings as SettingsIcon, AlertCircle, BookOpen, GraduationCap, Server, BookPlus, Loader2, Volume2, X, Square, ListPlus, CheckCircle } from 'lucide-react';
-import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings } from './types';
+import { DEFAULT_VOCABULARY, ChatMessage as ChatMessageType, EnglishLevel, VocabularyItem, Settings, ChatSession } from './types';
 import VocabularyPanel from './components/VocabularyPanel';
 import ChatMessage from './components/ChatMessage';
 import SettingsModal from './components/SettingsModal';
@@ -49,24 +48,81 @@ function App() {
       return DEFAULT_VOCABULARY;
   });
 
-  // Load Messages with persistence
-  const [messages, setMessages] = useState<ChatMessageType[]>(() => {
-      const saved = localStorage.getItem('lingoleap_messages');
+  // --- SESSIONS STATE REFACTOR ---
+  const [sessions, setSessions] = useState<ChatSession[]>(() => {
+      const saved = localStorage.getItem('lingoleap_sessions');
       if (saved) {
           try {
               return JSON.parse(saved);
           } catch (e) {
-              console.error("Failed to parse messages", e);
+              console.error("Failed to parse sessions", e);
           }
       }
-      // Default initial state if nothing saved
+      
+      // Migration: Check for legacy messages
+      const legacy = localStorage.getItem('lingoleap_messages');
+      if (legacy) {
+          try {
+              const msgs = JSON.parse(legacy);
+              if (Array.isArray(msgs) && msgs.length > 0) {
+                  return [{
+                      id: Date.now().toString(),
+                      title: '历史对话 (已恢复)',
+                      messages: msgs,
+                      createdAt: Date.now()
+                  }];
+              }
+          } catch (e) {}
+      }
+      
+      // Default: Create new session
       return [{
-        id: 'welcome',
-        role: 'model',
-        text: settings.initialGreeting,
-        usedVocabulary: []
+        id: Date.now().toString(),
+        title: '新对话',
+        messages: [{
+            id: 'welcome',
+            role: 'model',
+            text: settings.initialGreeting,
+            usedVocabulary: []
+        }],
+        createdAt: Date.now()
       }];
   });
+
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
+      const savedId = localStorage.getItem('lingoleap_current_session_id');
+      return savedId || (sessions.length > 0 ? sessions[0].id : '');
+  });
+
+  // Ensure current session exists (fallback if deleted)
+  useEffect(() => {
+     if (sessions.length > 0 && !sessions.find(s => s.id === currentSessionId)) {
+         setCurrentSessionId(sessions[0].id);
+     } else if (sessions.length === 0) {
+         // Should not happen due to default init, but safe guard
+         handleNewChat();
+     }
+  }, [sessions, currentSessionId]);
+
+  // Derived current session data
+  const currentSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+  const messages = currentSession?.messages || [];
+
+  // Helper to update messages for the CURRENT session
+  // This maintains compatibility with logic that expects setMessages
+  const setMessages = (newMessagesOrUpdater: any) => {
+      setSessions(prevSessions => {
+          return prevSessions.map(session => {
+              if (session.id === currentSessionId) {
+                  const updatedMessages = typeof newMessagesOrUpdater === 'function' 
+                    ? newMessagesOrUpdater(session.messages) 
+                    : newMessagesOrUpdater;
+                  return { ...session, messages: updatedMessages };
+              }
+              return session;
+          });
+      });
+  };
 
   // --- PERSISTENCE EFFECTS ---
   
@@ -80,10 +136,16 @@ function App() {
       localStorage.setItem('lingoleap_vocabulary', JSON.stringify(vocabulary));
   }, [vocabulary]);
 
-  // Save Messages (New)
+  // Save Sessions (Replaces legacy messages save)
   useEffect(() => {
-      localStorage.setItem('lingoleap_messages', JSON.stringify(messages));
-  }, [messages]);
+      localStorage.setItem('lingoleap_sessions', JSON.stringify(sessions));
+      // Clear legacy key to avoid confusion
+      localStorage.removeItem('lingoleap_messages');
+  }, [sessions]);
+
+  useEffect(() => {
+      localStorage.setItem('lingoleap_current_session_id', currentSessionId);
+  }, [currentSessionId]);
 
 
   const [mode, setMode] = useState<'chat' | 'quiz'>('chat');
@@ -102,9 +164,8 @@ function App() {
   
   // Tap-to-Define State
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [isDefining, setIsDefining] = useState(false); // Kept for legacy single define if needed, though now using queue
   
-  // Update welcome message if settings change (only if it's the only message)
+  // Update welcome message if settings change (only if it's the only message in current session)
   useEffect(() => {
     if (messages.length === 1 && messages[0].id === 'welcome' && messages[0].text !== settings.initialGreeting) {
         setMessages([{
@@ -123,7 +184,7 @@ function App() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, mode]);
+  }, [messages, mode, currentSessionId]);
 
   const showError = (msg: string) => {
     setErrorMsg(msg);
@@ -135,8 +196,93 @@ function App() {
       setTimeout(() => setQueueNotification(null), 2000);
   }
 
+  // --- SESSION HANDLERS ---
+  const handleNewChat = () => {
+      const newSession: ChatSession = {
+          id: Date.now().toString(),
+          title: '新对话',
+          messages: [{
+            id: 'welcome',
+            role: 'model',
+            text: settings.initialGreeting,
+            usedVocabulary: []
+          }],
+          createdAt: Date.now()
+      };
+      setSessions(prev => [newSession, ...prev]);
+      setCurrentSessionId(newSession.id);
+      if (window.innerWidth < 768) setIsSidebarOpen(false); // Close sidebar on mobile
+  };
+
+  const handleSwitchSession = (id: string) => {
+      setCurrentSessionId(id);
+      if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const handleRenameSession = (id: string, newTitle: string) => {
+      setSessions(prev => prev.map(s => s.id === id ? { ...s, title: newTitle.trim() || '未命名会话' } : s));
+  };
+
+  const handleDeleteSession = (id: string) => {
+      setSessions(prev => {
+          const newSessions = prev.filter(s => s.id !== id);
+          if (newSessions.length === 0) {
+              // Always keep at least one session
+               return [{
+                  id: Date.now().toString(),
+                  title: '新对话',
+                  messages: [{
+                    id: 'welcome',
+                    role: 'model',
+                    text: settings.initialGreeting,
+                    usedVocabulary: []
+                  }],
+                  createdAt: Date.now()
+              }];
+          }
+          return newSessions;
+      });
+  };
+
+  // Batch delete logic
+  const handleDeleteSessions = (ids: string[]) => {
+      setSessions(prev => {
+          const newSessions = prev.filter(s => !ids.includes(s.id));
+          if (newSessions.length === 0) {
+               return [{
+                  id: Date.now().toString(),
+                  title: '新对话',
+                  messages: [{
+                    id: 'welcome',
+                    role: 'model',
+                    text: settings.initialGreeting,
+                    usedVocabulary: []
+                  }],
+                  createdAt: Date.now()
+              }];
+          }
+          return newSessions;
+      });
+  };
+  
+  const handleClearSessions = () => {
+       const newSession: ChatSession = {
+          id: Date.now().toString(),
+          title: '新对话',
+          messages: [{
+            id: 'welcome',
+            role: 'model',
+            text: settings.initialGreeting,
+            usedVocabulary: []
+          }],
+          createdAt: Date.now()
+      };
+      setSessions([newSession]);
+      setCurrentSessionId(newSession.id);
+  };
+
   const handleDeleteMessage = (id: string) => {
-    setMessages(prev => prev.filter(m => m.id !== id));
+    setMessages((prev: ChatMessageType[]) => prev.filter(m => m.id !== id));
   };
 
   const handleAddGlobalVocab = (item: VocabularyItem) => {
@@ -196,7 +342,13 @@ function App() {
       text: input
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    // Auto-update title if it's the first user message
+    if (messages.length === 1 && currentSession.title === '新对话') {
+        const newTitle = input.length > 15 ? input.substring(0, 15) + '...' : input;
+        setSessions(prev => prev.map(s => s.id === currentSessionId ? { ...s, title: newTitle } : s));
+    }
+
+    setMessages((prev: ChatMessageType[]) => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
 
@@ -225,7 +377,7 @@ function App() {
         usedVocabulary: item.usedVocabulary
       }));
 
-      setMessages(prev => [...prev, ...newMessages]);
+      setMessages((prev: ChatMessageType[]) => [...prev, ...newMessages]);
     } catch (error: any) {
       if (error.message === "Aborted" || error.name === "AbortError") {
           // User stopped specifically, maybe add a small indicator or just do nothing
@@ -234,7 +386,7 @@ function App() {
           console.error("Failed to generate response", error);
           showError(error.message || "生成失败，请检查设置。");
           
-          setMessages(prev => [...prev, {
+          setMessages((prev: ChatMessageType[]) => [...prev, {
               id: Date.now().toString(),
               role: 'model',
               text: `⚠️ 错误: ${error.message || '连接中断'}。请检查 API Key 或代理设置。`
@@ -249,8 +401,6 @@ function App() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      // If loading, pressing enter should NOT resend, but maybe stop?
-      // Let's keep it safe: Only send if not loading.
       if (!isLoading) {
           handleSend();
       }
@@ -361,6 +511,15 @@ function App() {
         messages={messages} // Pass messages for sync summary
         pendingWords={pendingWords}
         setPendingWords={setPendingWords}
+        // Session Props
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onSwitchSession={handleSwitchSession}
+        onRenameSession={handleRenameSession}
+        onNewChat={handleNewChat}
+        onDeleteSession={handleDeleteSession}
+        onDeleteSessions={handleDeleteSessions}
+        onClearSessions={handleClearSessions}
       />
 
       <SettingsModal 
@@ -371,8 +530,8 @@ function App() {
         // Pass full state control for backup/restore
         vocabulary={vocabulary}
         setVocabulary={setVocabulary}
-        messages={messages}
-        setMessages={setMessages}
+        sessions={sessions}
+        setSessions={setSessions}
       />
 
       {/* Main Area */}

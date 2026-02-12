@@ -16,6 +16,13 @@ export interface ChatMessage {
   isPlaying?: boolean; 
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: number;
+}
+
 export enum EnglishLevel {
   A1 = 'A1 (Beginner)',
   A2 = 'A2 (Elementary)',

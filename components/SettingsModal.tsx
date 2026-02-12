@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Settings, EnglishLevel, VocabularyItem, ChatMessage } from '../types';
+import { Settings, EnglishLevel, VocabularyItem, ChatMessage, ChatSession } from '../types';
 import { X, Settings as SettingsIcon, Server, Mic, CheckCircle, AlertCircle, RefreshCw, MessageSquare, Cloud, Sparkles, UploadCloud, DownloadCloud, Loader2, FileJson, CheckSquare, Square, Smartphone, Github, ExternalLink, Save, FolderOpen, HardDrive, Wifi, WifiOff, Terminal, Copy, Trash2, Layout, Cpu, User, Brain, PenTool, Wrench } from 'lucide-react';
 import { loadVoices, AppVoice } from '../utils/ttsUtils';
 import { getAvailableModels } from '../services/geminiService';
 import { syncToGithub, loadFromGithub } from '../services/githubService';
 
 // We import metadata for the local version
-const APP_VERSION = "1.0.11"; // Must match metadata.json
+const APP_VERSION = "1.0.13"; // Must match metadata.json
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,8 +16,8 @@ interface SettingsModalProps {
   
   vocabulary?: VocabularyItem[];
   setVocabulary?: React.Dispatch<React.SetStateAction<VocabularyItem[]>>;
-  messages?: ChatMessage[];
-  setMessages?: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+  sessions?: ChatSession[];
+  setSessions?: React.Dispatch<React.SetStateAction<ChatSession[]>>;
 }
 
 interface BackupData {
@@ -25,7 +25,10 @@ interface BackupData {
     date: string;
     settings: Settings;
     vocabulary: VocabularyItem[];
-    messages: ChatMessage[];
+    // Supporting multiple sessions now
+    sessions?: ChatSession[];
+    // Legacy support
+    messages?: ChatMessage[];
 }
 
 interface RestoreSelection {
@@ -45,8 +48,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   setSettings,
   vocabulary,
   setVocabulary,
-  messages,
-  setMessages
+  sessions,
+  setSessions
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('system');
   const [voiceList, setVoiceList] = useState<AppVoice[]>([]);
@@ -246,11 +249,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // --- Local File Export/Import ---
   const handleExportLocal = () => {
       const backupData: BackupData = {
-          version: 1,
+          version: 2,
           date: new Date().toISOString(),
           settings: settings,
           vocabulary: vocabulary || [],
-          messages: messages || []
+          sessions: sessions || []
       };
       
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
@@ -343,7 +346,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       });
 
       if (restoreVocab && setVocabulary && backupPreview.vocabulary) setVocabulary(backupPreview.vocabulary);
-      if (history && setMessages && backupPreview.messages) setMessages(backupPreview.messages);
+      
+      if (history && setSessions) {
+          if (backupPreview.sessions) {
+              // Restore full sessions
+              setSessions(backupPreview.sessions);
+          } else if (backupPreview.messages) {
+              // Restore legacy single chat as a session
+              setSessions([{
+                  id: Date.now().toString(),
+                  title: 'Restored Chat',
+                  messages: backupPreview.messages,
+                  createdAt: Date.now()
+              }]);
+          }
+      }
 
       setCloudStatus('success');
       setCloudMsg('导入成功!');
@@ -360,11 +377,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       setCloudStatus('idle');
       try {
           const backupData: BackupData = {
-              version: 1,
+              version: 2,
               date: new Date().toISOString(),
               settings: settings,
               vocabulary: vocabulary || [],
-              messages: messages || []
+              sessions: sessions || []
           };
           await syncToGithub(settings, 'lingoleap_backup.json', JSON.stringify(backupData, null, 2));
           setCloudStatus('success');

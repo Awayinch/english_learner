@@ -6,12 +6,13 @@ LingoLeap is an immersive, personalized language learning web application powere
 Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.9-green.svg)
+![Version](https://img.shields.io/badge/version-1.0.13-green.svg)
 ![Powered By](https://img.shields.io/badge/AI-Google%20Gemini-orange)
 
 ## ✨ Key Features
 
 ### 🤖 Intelligent Chat & Roleplay
+- **Multi-Session Management**: Create, rename, switch, and batch delete conversation sessions.
 - **Powered by Gemini**: Supports `gemini-2.0-flash`, `gemini-3-flash-preview` and more.
 - **Custom Personas**: Set up any character (e.g., "Strict Victorian Teacher", "Casual Friend") via System Prompts.
 - **Long-Term Memory**: A "Memory Pad" that injects user details (goals, background) into every conversation context.
