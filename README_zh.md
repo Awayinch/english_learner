@@ -10,7 +10,6 @@ LingoLeap 是一款沉浸式、个性化的语言学习 Web 应用，由 **Googl
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0.13-green.svg)
-![Powered By](https://img.shields.io/badge/AI-Google%20Gemini-orange)
 
 ## ✨ 核心功能
 
