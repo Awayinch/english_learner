@@ -1,5 +1,8 @@
+[🇨🇳 简体中文](README_zh.md) | [🇬🇧 English](README.md)
 
 # LingoLeap - AI Language Tutor 🎓
+
+**Live Demo:** [https://english-learner.vercel.app](https://english-learner.vercel.app) *(Replace with your actual Vercel link)*
 
 LingoLeap is an immersive, personalized language learning web application powered by **Google Gemini**. It combines real-time AI conversation, contextual vocabulary tracking, and gamified quizzes into a single, cross-device experience.
 
@@ -36,30 +39,30 @@ Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ---
 
-## 📱 Mobile Usage (Termux) - 懒人版指南
+## 📱 Mobile Usage (Termux) - Lazy Setup Guide
 
-你可以使用 Android 手机上的 Termux 运行此应用。
+You can run this application on your Android phone locally using Termux.
 
-### 1. 首次安装指令（一条龙复制）
-这段代码会自动配置环境、下载代码、安装依赖并运行。
+### 1. First-time Installation (All-in-one command)
+This script will automatically configure the environment, download the code, install dependencies, and run the app.
 
 ```bash
 pkg update -y && pkg upgrade -y && pkg install git nodejs -y && git clone https://github.com/Awayinch/english_learner.git && cd english_learner && chmod +x start.sh && ./start.sh
 ```
 
-*(如果 git clone 失败，请确保开启了加速器，或配置了 GitHub 镜像)*
+*(If `git clone` fails, please ensure you have a proxy enabled or a GitHub mirror configured)*
 
-### 2. 以后每次启动的最短指令
-以后打开 Termux，只需要输入下面这一行：
+### 2. Quick Start Command (For subsequent launches)
+Next time you open Termux, just enter this single line:
 
 ```bash
 cd english_learner && ./start.sh
 ```
 
-**原理说明：**
-*   `chmod +x start.sh`: 赋予脚本执行权限。
-*   `./start.sh`: 自动执行 `npm install` (依赖检查), `npm run build` (编译) 和 `npx serve` (启动服务器)。
-*   **端口隔离**: 强制指定 3000 端口，与 SillyTavern (8000) 等其他服务互不冲突。
+**How it works:**
+*   `chmod +x start.sh`: Grants execution permission to the script.
+*   `./start.sh`: Automatically executes `npm install` (dependency check), `npm run build` (compilation), and `npx serve` (starts the server).
+*   **Port Isolation**: Forces port 3000 to avoid conflicts with other services like SillyTavern (8000).
 
 ---
 
@@ -85,8 +88,6 @@ cd english_learner && ./start.sh
 
 3. **Run locally**
    ```bash
-   npm start
-   # or
    npm run dev
    ```
 
@@ -98,7 +99,7 @@ Click the **Settings (Gear Icon)** in the app to configure connections.
 
 ### 1. AI Connection
 - **API Key**: Enter your Google Gemini API Key.
-- **Base URL (Optional)**: If you are using a proxy (e.g., OneAPI) or cannot access Google directly, enter your proxy URL here (e.g., `https://your-proxy.com`). The app is compatible with OpenAI-format proxies.
+- **Base URL (Optional)**: If you are using a proxy (e.g., OneAPI) or cannot access Google directly, enter your proxy URL here. The app is compatible with OpenAI-format proxies.
 
 ### 2. Setting Up Cloud Sync (Cross-Device)
 To sync data between your Phone and PC, LingoLeap uses GitHub's API.
