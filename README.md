@@ -2,15 +2,13 @@
 
 # LingoLeap - AI Language Tutor 🎓
 
-**Live Demo:** [https://english-learner.vercel.app](https://english-learner.vercel.app) *(Replace with your actual Vercel link)*
-
+**Live Demo:** [https://english-learner.vercel.app](https://english-learner-wx.vercel.app) 
 LingoLeap is an immersive, personalized language learning web application powered by **Google Gemini**. It combines real-time AI conversation, contextual vocabulary tracking, and gamified quizzes into a single, cross-device experience.
 
 Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Version](https://img.shields.io/badge/version-1.0.13-green.svg)
-![Powered By](https://img.shields.io/badge/AI-Google%20Gemini-orange)
 
 ## ✨ Key Features
 
