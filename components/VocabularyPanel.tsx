@@ -50,7 +50,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   onClearSessions
 }) => {
   // Accordion State
-  const [activeSection, setActiveSection] = useState<'chats' | 'vocab'>('chats');
+  const [activeSection, setActiveSection] = useState<'chats' | 'assets' | 'vocab'>('assets');
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,6 +87,115 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
     item.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
     item.definition.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalMessages = sessions.reduce((sum, session) => sum + session.messages.length, 0);
+  const knowledgeAssets = vocabulary.length + sessions.length;
+  const contextualizedWords = vocabulary.filter(item => item.example || item.definition.length > 8).length;
+  const weakNodes = pendingWords.length + vocabulary.filter(item => !item.example).length;
+  const externalizationRate = vocabulary.length === 0 ? 0 : Math.round((contextualizedWords / vocabulary.length) * 100);
+  const reviewPressure = knowledgeAssets === 0 ? 0 : Math.min(100, Math.round((weakNodes / Math.max(knowledgeAssets, 1)) * 100));
+  const averageSessionDepth = sessions.length === 0 ? 0 : Math.round(totalMessages / sessions.length);
+  const missingContextWords = vocabulary.filter(item => !item.example).slice(0, 4);
+  const reinforcementNodes = [
+      ...pendingWords.slice(0, 4).map(word => ({ label: word, reason: '待查询释义' })),
+      ...missingContextWords.map(item => ({ label: item.word, reason: '待补充语境' }))
+  ].slice(0, 4);
+  const partOfSpeechCounts = vocabulary.reduce<Record<string, number>>((acc, item) => {
+      const key = item.partOfSpeech || 'unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+  }, {});
+  const topCategories = Object.entries(partOfSpeechCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+  const assetStats = [
+      { label: '知识存量', value: vocabulary.length, tone: 'text-indigo-700 bg-indigo-50' },
+      { label: '学习记录', value: sessions.length, tone: 'text-sky-700 bg-sky-50' },
+      { label: '语境化率', value: `${externalizationRate}%`, tone: 'text-emerald-700 bg-emerald-50' },
+      { label: '待强化', value: weakNodes, tone: 'text-rose-700 bg-rose-50' }
+  ];
+
+  const escapeYaml = (value: string) => value.replace(/"/g, '\\"');
+
+  const buildPkmMarkdown = () => {
+      const now = new Date();
+      const iso = now.toISOString();
+      const dateStr = iso.split('T')[0];
+      const vocabCards = vocabulary.map(item => `### [[Vocabulary/IELTS/${item.word}]]
+
+- **Part of speech**: ${item.partOfSpeech || 'unknown'}
+- **Definition**: ${item.definition}
+- **Example**: ${item.example || '待补充语境例句'}
+- **Tags**: #Vocabulary/IELTS #PKM/LanguageLearning
+- **Review status**: ${item.example ? 'contextualized' : 'needs-context'}
+`).join('\n');
+
+      const recentSessions = sessions.slice(0, 8).map(session => (
+          `- [[Learning Sessions/${session.title || 'Untitled'}]] - ${session.messages.length} messages`
+      )).join('\n');
+
+      return `---
+title: "LingoLeap IELTS PKM Export ${dateStr}"
+created: "${iso}"
+type: "language-learning-pkm"
+target: "IELTS"
+level: "${escapeYaml(String(settings.level))}"
+vocabulary_count: ${vocabulary.length}
+session_count: ${sessions.length}
+message_count: ${totalMessages}
+tags:
+  - Vocabulary/IELTS
+  - PKM/LanguageLearning
+  - KnowledgeManagement/SECI
+---
+
+# LingoLeap IELTS Personal Knowledge Base
+
+## Knowledge Asset Dashboard
+
+| Metric | Value | KM meaning |
+| --- | ---: | --- |
+| Knowledge stock | ${vocabulary.length} | Explicit vocabulary nodes stored in the PKM |
+| Learning sessions | ${sessions.length} | Captured learning contexts |
+| Externalized records | ${totalMessages} | Conversation turns converted into reviewable traces |
+| Contextualized cards | ${contextualizedWords} | Vocabulary nodes with enough semantic information |
+| Pending reinforcement nodes | ${weakNodes} | Items requiring examples, review, or AI enrichment |
+
+## DIKW Mapping
+
+- **Data**: raw words and chat fragments collected during learning.
+- **Information**: definitions, parts of speech, examples, and session context.
+- **Knowledge**: structured IELTS cards connected through tags and backlinks.
+- **Wisdom**: review decisions based on weak nodes and repeated learning traces.
+
+## SECI Mapping
+
+- **Socialization**: reading and AI conversation produce implicit language exposure.
+- **Externalization**: unknown words are captured into explicit vocabulary cards.
+- **Combination**: cards are exported with YAML, tags, and backlinks for Obsidian.
+- **Internalization**: review, quiz, and reuse convert cards back into language ability.
+
+## Recent Learning Sessions
+
+${recentSessions || '- No sessions yet.'}
+
+## Vocabulary Knowledge Cards
+
+${vocabCards || '> No vocabulary cards yet.'}
+`;
+  };
+
+  const handleExportPkmMarkdown = () => {
+      const markdown = buildPkmMarkdown();
+      const dateStr = new Date().toISOString().split('T')[0];
+      const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(markdown);
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `lingoleap-ielts-pkm-${dateStr}.md`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
 
   const handleAddWord = () => {
     if (newWord && newDef) {
@@ -487,6 +596,143 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
           )}
       </div>
 
+      {/* ACCORDION: KNOWLEDGE ASSETS */}
+      <div className="border-b border-slate-200 flex-shrink-0">
+          <button
+            onClick={() => setActiveSection(activeSection === 'assets' ? 'vocab' : 'assets')}
+            className={`w-full flex items-center justify-between p-4 font-bold text-sm ${activeSection === 'assets' ? 'bg-indigo-50 text-indigo-700' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+              <div className="flex items-center gap-2">
+                  <ListChecks size={18} /> 知识资产看板
+              </div>
+              {activeSection === 'assets' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+
+          {activeSection === 'assets' && (
+              <div className="bg-slate-50 p-3 max-h-[58vh] overflow-y-auto animate-in slide-in-from-top-2 space-y-3">
+                  <div className="rounded-lg bg-white border border-indigo-100 p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                          <div>
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wide">IELTS PKM Dashboard</p>
+                              <h3 className="text-sm font-semibold text-slate-800">个人语言知识资产</h3>
+                          </div>
+                          <button
+                              onClick={handleExportPkmMarkdown}
+                              className="shrink-0 px-2.5 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700 flex items-center gap-1"
+                              title="导出 Obsidian Markdown"
+                          >
+                              <Download size={13} /> PKM
+                          </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                          {assetStats.map(stat => (
+                              <div key={stat.label} className={`rounded-md p-2 ${stat.tone}`}>
+                                  <p className="text-[10px] opacity-80">{stat.label}</p>
+                                  <p className="text-lg font-bold leading-tight">{stat.value}</p>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm space-y-3">
+                      <div>
+                          <div className="flex justify-between text-xs mb-1">
+                              <span className="font-medium text-slate-600">知识外化完成度</span>
+                              <span className="font-semibold text-emerald-600">{externalizationRate}%</span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${externalizationRate}%` }} />
+                          </div>
+                      </div>
+                      <div>
+                          <div className="flex justify-between text-xs mb-1">
+                              <span className="font-medium text-slate-600">复习压力指数</span>
+                              <span className="font-semibold text-rose-600">{reviewPressure}%</span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-rose-500 rounded-full" style={{ width: `${reviewPressure}%` }} />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-md bg-slate-50 p-2">
+                              <p className="text-slate-400">对话深度</p>
+                              <p className="font-bold text-slate-700">{averageSessionDepth} 条/会话</p>
+                          </div>
+                          <div className="rounded-md bg-slate-50 p-2">
+                              <p className="text-slate-400">外化记录</p>
+                              <p className="font-bold text-slate-700">{totalMessages} 条</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <p className="text-xs font-semibold text-slate-700 mb-2">DIKW 知识流转</p>
+                      <div className="grid grid-cols-4 gap-1 text-center">
+                          {[
+                              ['Data', vocabulary.length + totalMessages],
+                              ['Info', contextualizedWords],
+                              ['Know', knowledgeAssets],
+                              ['Review', weakNodes]
+                          ].map(([label, value]) => (
+                              <div key={label} className="rounded bg-slate-50 p-1.5">
+                                  <p className="text-[10px] text-slate-400">{label}</p>
+                                  <p className="text-sm font-bold text-slate-700">{value}</p>
+                              </div>
+                          ))}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+                          <span>采集</span>
+                          <span>加工</span>
+                          <span>沉淀</span>
+                          <span>内化</span>
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <div className="flex justify-between items-center mb-2">
+                          <p className="text-xs font-semibold text-slate-700">待强化节点</p>
+                          <span className="text-[10px] text-slate-400">{weakNodes} 项</span>
+                      </div>
+                      <div className="space-y-1.5">
+                          {reinforcementNodes.length > 0 ? reinforcementNodes.map(node => (
+                              <div key={`${node.label}-${node.reason}`} className="flex items-center justify-between gap-2 rounded bg-rose-50 px-2 py-1.5 text-xs">
+                                  <span className="truncate font-medium text-rose-700">{node.label}</span>
+                                  <span className="shrink-0 text-rose-400">{node.reason}</span>
+                              </div>
+                          )) : (
+                              <div className="rounded bg-emerald-50 px-2 py-2 text-xs text-emerald-700">
+                                  当前没有明显薄弱节点
+                              </div>
+                          )}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <p className="text-xs font-semibold text-slate-700 mb-2">知识类别分布</p>
+                      <div className="space-y-2">
+                          {topCategories.length > 0 ? topCategories.map(([label, count]) => {
+                              const width = Math.round((count / Math.max(vocabulary.length, 1)) * 100);
+                              return (
+                                  <div key={label}>
+                                      <div className="flex justify-between text-[11px] mb-1">
+                                          <span className="text-slate-600 truncate">{label}</span>
+                                          <span className="text-slate-400">{count}</span>
+                                      </div>
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                          <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${width}%` }} />
+                                      </div>
+                                  </div>
+                              );
+                          }) : (
+                              <p className="text-xs text-slate-400">暂无词汇类别数据</p>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          )}
+      </div>
+
       {/* ACCORDION: VOCABULARY */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
           <button 
@@ -641,6 +887,9 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-sm font-semibold text-slate-700">词汇列表</h3>
                             <div className="flex gap-1">
+                                <button onClick={handleExportPkmMarkdown} title="导出 Obsidian Markdown" className="px-2 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded flex items-center gap-1">
+                                    <Download size={14} /> PKM
+                                </button>
                                 <button onClick={() => setIsImportMode(true)} title="AI 智能导入" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
                                     <Upload size={16} />
                                 </button>
