@@ -84,6 +84,18 @@ def add_heading(doc, text, level=1):
     return p
 
 
+def add_center_title(doc, text):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.first_line_indent = None
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(11)
+    p.paragraph_format.line_spacing = 1.5
+    run = p.add_run(text)
+    set_run_font(run, name="黑体", size=15, bold=True, color=INK)
+    return p
+
+
 def add_bullets(doc, items: Iterable[str]):
     for item in items:
         p = doc.add_paragraph(style="List Bullet")
@@ -326,7 +338,7 @@ def add_cover(doc):
 
 
 def add_abstract(doc):
-    add_heading(doc, "摘 要", level=1)
+    add_center_title(doc, "摘     要")
     abstract = (
         "外语学习本质上是学习者对语言知识进行获取、加工、存储、检索和内化的过程。传统英语学习工具常常能够提供对话、翻译或词汇查询功能，"
         "但学习痕迹分散在聊天记录、截图和临时笔记中，难以形成可复用、可追踪、可复盘的个人知识资产。本文以个人项目 LingoLeap 为基础，"
@@ -342,7 +354,7 @@ def add_abstract(doc):
 
 
 def add_toc(doc):
-    add_heading(doc, "目 录", level=1)
+    add_center_title(doc, "目     录")
     entries = [
         ("摘 要", "II"),
         ("1 研究背景与问题提出", "1"),
@@ -798,7 +810,7 @@ def build_report():
     )
     page_break(doc)
 
-    add_heading(doc, "参 考 文 献", level=1)
+    add_center_title(doc, "参 考 文 献")
     references = [
         "Ackoff, R. L. (1989). From data to wisdom. Journal of Applied Systems Analysis, 16, 3-9.",
         "Nonaka, I., & Takeuchi, H. (1995). The Knowledge-Creating Company. Oxford University Press.",
