@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { VocabularyItem, EnglishLevel, Settings, ChatMessage, ChatSession } from '../types';
 import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, Search, Server, ListPlus, Play, MessageSquare, MessageSquarePlus, ChevronDown, ChevronRight, History, Edit2, Check, CheckSquare, Square, ListChecks } from 'lucide-react';
 import { processVocabularyFromText, generateObsidianSummary, defineVocabularyBatch } from '../services/geminiService';
@@ -27,6 +27,17 @@ interface VocabularyPanelProps {
   onDeleteSessions: (ids: string[]) => void;
   onClearSessions: () => void;
 }
+
+interface ReflectionEntry {
+  id: string;
+  createdAt: number;
+  cognitiveLoad: number;
+  anxiety: number;
+  confidence: number;
+  plan: string;
+}
+
+const REFLECTION_STORAGE_KEY = 'lingoleap_reflection_entries';
 
 const LOCAL_SYNONYM_MAP: Record<string, string[]> = {
   ephemeral: ['short-lived', 'temporary', 'fleeting'],
@@ -138,6 +149,38 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const [reflectionEntries, setReflectionEntries] = useState<ReflectionEntry[]>(() => {
+      try {
+          const raw = localStorage.getItem(REFLECTION_STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          return parsed
+              .filter(entry => entry && typeof entry.createdAt === 'number')
+              .map(entry => ({
+                  id: String(entry.id || `reflection-${entry.createdAt}`),
+                  createdAt: entry.createdAt,
+                  cognitiveLoad: Number(entry.cognitiveLoad) || 3,
+                  anxiety: Number(entry.anxiety) || 2,
+                  confidence: Number(entry.confidence) || 3,
+                  plan: String(entry.plan || '')
+              }))
+              .slice(0, 50);
+      } catch {
+          return [];
+      }
+  });
+  const [reflectionForm, setReflectionForm] = useState({
+      cognitiveLoad: 3,
+      anxiety: 2,
+      confidence: 3,
+      plan: ''
+  });
+
+  useEffect(() => {
+      localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(reflectionEntries.slice(0, 50)));
+  }, [reflectionEntries]);
+
   // Filter Logic
   const filteredVocabulary = vocabulary.filter(item => 
     item.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -187,22 +230,43 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const topCategories = Object.entries(partOfSpeechCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4);
+  const latestReflection = reflectionEntries[0];
+  const averageReflectionScore = (key: 'cognitiveLoad' | 'anxiety' | 'confidence') => {
+      if (reflectionEntries.length === 0) return 0;
+      const average = reflectionEntries.reduce((sum, entry) => sum + entry[key], 0) / reflectionEntries.length;
+      return Number(average.toFixed(1));
+  };
+  const averageCognitiveLoad = averageReflectionScore('cognitiveLoad');
+  const averageAnxiety = averageReflectionScore('anxiety');
+  const averageConfidence = averageReflectionScore('confidence');
+  const formatReflectionDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+  });
   const assetStats = [
       { label: '词汇卡片', value: vocabulary.length, source: '存储记录', tone: 'text-indigo-700 bg-indigo-50' },
       { label: '语境暴露', value: observedExposureEvents, source: '聊天文本命中', tone: 'text-sky-700 bg-sky-50' },
       { label: '主动使用', value: activeUseEvents, source: '用户消息命中', tone: 'text-emerald-700 bg-emerald-50' },
-      { label: '深加工卡片', value: enhancedCards, source: '语境增强记录', tone: 'text-violet-700 bg-violet-50' }
+      { label: '深加工卡片', value: enhancedCards, source: '语境增强记录', tone: 'text-violet-700 bg-violet-50' },
+      { label: '反思记录', value: reflectionEntries.length, source: '学习者自评', tone: 'text-teal-700 bg-teal-50' }
   ];
   const measuredIndicators = [
       { label: '卡片完整率', value: `${completionRate}%`, detail: `${completeCards}/${vocabulary.length}`, theory: '词汇知识: form-meaning-use' },
       { label: '语境化率', value: `${contextualizationRate}%`, detail: `${contextualizedWords}/${vocabulary.length}`, theory: 'Nation: varied meetings' },
       { label: '输出迁移率', value: `${activeUseRate}%`, detail: `${activelyUsedWords}/${vocabulary.length}`, theory: 'meaning-focused output' },
-      { label: '平均会话深度', value: averageSessionDepth, detail: `${totalMessages} 条消息`, theory: 'learning analytics trace' }
+      { label: '平均会话深度', value: averageSessionDepth, detail: `${totalMessages} 条消息`, theory: 'learning analytics trace' },
+      {
+          label: '平均认知负荷',
+          value: reflectionEntries.length ? `${averageCognitiveLoad}/5` : '待记录',
+          detail: `${reflectionEntries.length} 条自评`,
+          theory: 'SRL / cognitive load'
+      }
   ];
   const missingIndicators = [
       { label: '主动回忆成功率', theory: 'retrieval practice', requirement: '需要测验答题日志' },
-      { label: '间隔复习逾期数', theory: 'spacing effect', requirement: '需要 nextReviewAt' },
-      { label: '情绪/认知负荷', theory: 'SRL / cognitive load', requirement: '需要用户自评' }
+      { label: '间隔复习逾期数', theory: 'spacing effect', requirement: '需要 nextReviewAt' }
   ];
   const enhancementRate = vocabulary.length === 0 ? 0 : Math.round((enhancedCards / vocabulary.length) * 100);
   const cardsNeedingEnhancement = Math.max(vocabulary.length - enhancedCards, 0);
@@ -241,7 +305,26 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       setVocabulary(prev => prev.map(item => item.id === id ? buildVocabularyEnhancement(item) : item));
   };
 
+  const handleReflectionScoreChange = (field: 'cognitiveLoad' | 'anxiety' | 'confidence', value: number) => {
+      setReflectionForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveReflection = () => {
+      const now = Date.now();
+      const nextEntry: ReflectionEntry = {
+          id: `reflection-${now}`,
+          createdAt: now,
+          cognitiveLoad: reflectionForm.cognitiveLoad,
+          anxiety: reflectionForm.anxiety,
+          confidence: reflectionForm.confidence,
+          plan: reflectionForm.plan.trim()
+      };
+      setReflectionEntries(prev => [nextEntry, ...prev].slice(0, 50));
+      setReflectionForm(prev => ({ ...prev, plan: '' }));
+  };
+
   const escapeYaml = (value: string) => value.replace(/"/g, '\\"');
+  const normalizeMarkdownLine = (value: string) => value.replace(/\s+/g, ' ').trim();
 
   const buildPkmMarkdown = () => {
       const now = new Date();
@@ -269,6 +352,9 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
       const recentSessions = sessions.slice(0, 8).map(session => (
           `- [[学习会话/${session.title || '未命名会话'}]] - ${session.messages.length} 条消息`
       )).join('\n');
+      const recentReflections = reflectionEntries.slice(0, 8).map(entry => (
+          `- ${formatReflectionDate(entry.createdAt)}: 认知负荷 ${entry.cognitiveLoad}/5，学习焦虑 ${entry.anxiety}/5，复习信心 ${entry.confidence}/5；下一步计划：${normalizeMarkdownLine(entry.plan) || '未填写'}`
+      )).join('\n');
 
       return `---
 title: "LingoLeap 雅思个人知识库导出 ${dateStr}"
@@ -279,6 +365,7 @@ level: "${escapeYaml(String(settings.level))}"
 vocabulary_count: ${vocabulary.length}
 session_count: ${sessions.length}
 message_count: ${totalMessages}
+reflection_count: ${reflectionEntries.length}
 tags:
   - 词汇/雅思
   - 个人知识管理/语言学习
@@ -298,6 +385,10 @@ tags:
 | 主动使用事件 | ${activeUseEvents} | 目标词在学习者输出中出现的次数 |
 | 完整卡片 | ${completeCards} | 具备词形、释义、词性与语境证据的卡片 |
 | 深加工卡片 | ${enhancedCards} | 已补充同义词、构词或例句的卡片 |
+| 学习反思记录 | ${reflectionEntries.length} | 学习者手动记录的自评与下一步计划 |
+| 平均认知负荷 | ${reflectionEntries.length ? `${averageCognitiveLoad}/5` : '待记录'} | 来自学习反思滑杆记录 |
+| 平均学习焦虑 | ${reflectionEntries.length ? `${averageAnxiety}/5` : '待记录'} | 来自学习反思滑杆记录 |
+| 平均复习信心 | ${reflectionEntries.length ? `${averageConfidence}/5` : '待记录'} | 来自学习反思滑杆记录 |
 | 待强化节点 | ${weakNodes} | 缺少定义、语境或复习记录的项目 |
 
 ## 指标口径说明
@@ -305,7 +396,8 @@ tags:
 - **卡片完整率**: 依据词汇知识的 form、meaning、use 框架，检查词形、释义、词性与语境证据。
 - **语境暴露**: 从历史对话日志中匹配目标词，不手动估计。
 - **主动使用**: 只统计目标词出现在学习者消息中的次数。
-- **待采集指标**: 主动回忆成功率、间隔复习逾期数、认知负荷等需要测验日志、复习日期或用户自评，当前不做伪推断。
+- **学习反思/自评**: 认知负荷、学习焦虑和复习信心来自学习者手动记录，属于自我调节学习过程证据。
+- **待采集指标**: 主动回忆成功率、间隔复习逾期数等需要测验日志或复习日期，当前不做伪推断。
 
 ## DIKW 映射
 
@@ -324,6 +416,10 @@ tags:
 ## 近期学习会话
 
 ${recentSessions || '- 暂无学习会话。'}
+
+## 学习反思/自评记录
+
+${recentReflections || '- 暂无自评记录。'}
 
 ## 词汇知识卡片
 
@@ -786,7 +882,7 @@ ${vocabCards || '> 暂无词汇卡片。'}
                   <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm">
                       <p className="font-semibold text-slate-700">方法口径</p>
                       <p className="mt-1 leading-relaxed">
-                          本看板只统计可观测学习痕迹：词卡字段、历史对话命中、用户主动使用。测验正确率、间隔复习和心理负荷需要后续日志，当前标为待采集。
+                          本看板统计可观测学习痕迹：词卡字段、历史对话命中、用户主动使用；心理负荷来自学习者自评。测验正确率和间隔复习仍需后续日志。
                       </p>
                   </div>
 
@@ -821,6 +917,78 @@ ${vocabCards || '> 暂无词汇卡片。'}
                               <p className="text-base font-bold">{enhancementRate}%</p>
                           </div>
                       </div>
+                  </div>
+
+                  <div className="rounded-lg border border-teal-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                          <div>
+                              <p className="text-xs font-semibold text-slate-700">学习反思/自评记录</p>
+                              <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                                  记录认知负荷、学习焦虑、复习信心和下一步计划。
+                              </p>
+                          </div>
+                          <button
+                              onClick={handleSaveReflection}
+                              className="shrink-0 px-2.5 py-1.5 bg-teal-600 text-white rounded text-xs font-semibold hover:bg-teal-700 flex items-center gap-1"
+                              title="保存本次学习反思"
+                          >
+                              <Check size={13} /> 保存
+                          </button>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                          {[
+                              { label: '认知负荷', field: 'cognitiveLoad' as const, low: '轻松', high: '吃力' },
+                              { label: '学习焦虑', field: 'anxiety' as const, low: '稳定', high: '紧张' },
+                              { label: '复习信心', field: 'confidence' as const, low: '不足', high: '很足' }
+                          ].map(item => (
+                              <label key={item.field} className="block rounded bg-slate-50 p-2">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                      <span className="font-medium text-slate-600">{item.label}</span>
+                                      <span className="font-bold text-teal-700">{reflectionForm[item.field]}/5</span>
+                                  </div>
+                                  <input
+                                      type="range"
+                                      min="1"
+                                      max="5"
+                                      value={reflectionForm[item.field]}
+                                      onChange={(e) => handleReflectionScoreChange(item.field, Number(e.target.value))}
+                                      className="mt-1 w-full accent-teal-600"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                      <span>{item.low}</span>
+                                      <span>{item.high}</span>
+                                  </div>
+                              </label>
+                          ))}
+                          <textarea
+                              value={reflectionForm.plan}
+                              onChange={(e) => setReflectionForm(prev => ({ ...prev, plan: e.target.value }))}
+                              rows={2}
+                              className="w-full rounded border border-slate-200 p-2 text-xs text-slate-700 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200"
+                              placeholder="下一步计划：例如明天复习高频同义替换，并用 3 个词写作文句子。"
+                          />
+                      </div>
+                      {latestReflection ? (
+                          <div className="mt-2 rounded bg-teal-50 p-2 text-[11px] text-teal-800">
+                              <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold">最近记录</span>
+                                  <span className="text-teal-600">{formatReflectionDate(latestReflection.createdAt)}</span>
+                              </div>
+                              <p className="mt-1">
+                                  负荷 {latestReflection.cognitiveLoad}/5 · 焦虑 {latestReflection.anxiety}/5 · 信心 {latestReflection.confidence}/5
+                              </p>
+                              <p className="mt-1 text-teal-700">
+                                  均值：负荷 {averageCognitiveLoad}/5 · 焦虑 {averageAnxiety}/5 · 信心 {averageConfidence}/5
+                              </p>
+                              {latestReflection.plan && (
+                                  <p className="mt-1 text-teal-700">下一步：{latestReflection.plan}</p>
+                              )}
+                          </div>
+                      ) : (
+                          <div className="mt-2 rounded bg-slate-50 p-2 text-[11px] text-slate-500">
+                              暂无反思记录。保存后会进入看板统计和 PKM Markdown 导出。
+                          </div>
+                      )}
                   </div>
 
                   <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
