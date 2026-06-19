@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { VocabularyItem, EnglishLevel, Settings, ChatMessage, ChatSession } from '../types';
 import { BookOpen, Plus, Trash2, X, Upload, Sparkles, Download, StopCircle, Cloud, Loader2, CheckCircle, AlertCircle, Search, Server, ListPlus, Play, MessageSquare, MessageSquarePlus, ChevronDown, ChevronRight, History, Edit2, Check, CheckSquare, Square, ListChecks } from 'lucide-react';
 import { processVocabularyFromText, generateObsidianSummary, defineVocabularyBatch } from '../services/geminiService';
@@ -28,6 +28,73 @@ interface VocabularyPanelProps {
   onClearSessions: () => void;
 }
 
+interface ReflectionEntry {
+  id: string;
+  createdAt: number;
+  cognitiveLoad: number;
+  anxiety: number;
+  confidence: number;
+  plan: string;
+}
+
+const REFLECTION_STORAGE_KEY = 'lingoleap_reflection_entries';
+
+const LOCAL_SYNONYM_MAP: Record<string, string[]> = {
+  ephemeral: ['short-lived', 'temporary', 'fleeting'],
+  serendipity: ['fortunate accident', 'chance discovery', 'happy coincidence'],
+  eloquent: ['fluent', 'persuasive', 'expressive'],
+  resilient: ['adaptable', 'tough', 'recovering quickly'],
+  pragmatic: ['practical', 'realistic', 'sensible'],
+  significant: ['important', 'notable', 'meaningful'],
+  crucial: ['essential', 'critical', 'vital'],
+  demonstrate: ['show', 'illustrate', 'prove'],
+  indicate: ['show', 'suggest', 'signal'],
+  improve: ['enhance', 'strengthen', 'upgrade'],
+  decline: ['decrease', 'drop', 'deteriorate'],
+  impact: ['effect', 'influence', 'consequence'],
+  benefit: ['advantage', 'gain', 'value'],
+  challenge: ['difficulty', 'obstacle', 'problem'],
+  sustainable: ['long-term', 'durable', 'environmentally sound'],
+  efficient: ['productive', 'effective', 'well-organized'],
+  evidence: ['proof', 'support', 'indication'],
+  factor: ['element', 'driver', 'cause'],
+  policy: ['rule', 'strategy', 'guideline'],
+  acquire: ['gain', 'obtain', 'learn']
+};
+
+const MORPHEME_HINTS = [
+  { pattern: /^un/i, hint: 'un-: 否定或相反含义前缀' },
+  { pattern: /^re/i, hint: 're-: 再次、返回或重复' },
+  { pattern: /^pre/i, hint: 'pre-: 之前、预先' },
+  { pattern: /^inter/i, hint: 'inter-: 之间、相互' },
+  { pattern: /^trans/i, hint: 'trans-: 跨越、转化' },
+  { pattern: /tion$/i, hint: '-tion: 行为、过程或状态名词后缀' },
+  { pattern: /ment$/i, hint: '-ment: 行为结果或状态名词后缀' },
+  { pattern: /ity$/i, hint: '-ity: 性质或状态名词后缀' },
+  { pattern: /ive$/i, hint: '-ive: 具有某种倾向或性质的形容词后缀' },
+  { pattern: /ous$/i, hint: '-ous: 具有某种特征的形容词后缀' },
+  { pattern: /able$/i, hint: '-able: 能够被、具有某种能力' },
+  { pattern: /ly$/i, hint: '-ly: 常见副词后缀' }
+];
+
+const inferWordFamily = (word: string, partOfSpeech: string) => {
+  const lowerPart = partOfSpeech.toLowerCase();
+  if (lowerPart.includes('verb') || lowerPart === 'v') {
+      return [`${word}ing`, `${word}ed`, `${word}s`];
+  }
+  if (lowerPart.includes('adj')) {
+      return [`${word}ly（副词候选）`, `${word}ness（名词候选）`];
+  }
+  if (lowerPart.includes('noun') || lowerPart === 'n') {
+      return [`${word}s（复数候选）`, `${word}-based（复合修饰语候选）`];
+  }
+  return ['待结合词典继续补全词族'];
+};
+
+const buildGeneratedExample = (item: VocabularyItem) => {
+  return `In an IELTS task, a learner can use "${item.word}" to discuss ${item.definition}.`;
+};
+
 const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   vocabulary,
   setVocabulary,
@@ -50,7 +117,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   onClearSessions
 }) => {
   // Accordion State
-  const [activeSection, setActiveSection] = useState<'chats' | 'vocab'>('chats');
+  const [activeSection, setActiveSection] = useState<'chats' | 'assets' | 'vocab'>('assets');
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,11 +149,295 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const [reflectionEntries, setReflectionEntries] = useState<ReflectionEntry[]>(() => {
+      try {
+          const raw = localStorage.getItem(REFLECTION_STORAGE_KEY);
+          if (!raw) return [];
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed)) return [];
+          return parsed
+              .filter(entry => entry && typeof entry.createdAt === 'number')
+              .map(entry => ({
+                  id: String(entry.id || `reflection-${entry.createdAt}`),
+                  createdAt: entry.createdAt,
+                  cognitiveLoad: Number(entry.cognitiveLoad) || 3,
+                  anxiety: Number(entry.anxiety) || 2,
+                  confidence: Number(entry.confidence) || 3,
+                  plan: String(entry.plan || '')
+              }))
+              .slice(0, 50);
+      } catch {
+          return [];
+      }
+  });
+  const [reflectionForm, setReflectionForm] = useState({
+      cognitiveLoad: 3,
+      anxiety: 2,
+      confidence: 3,
+      plan: ''
+  });
+
+  useEffect(() => {
+      localStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(reflectionEntries.slice(0, 50)));
+  }, [reflectionEntries]);
+
   // Filter Logic
   const filteredVocabulary = vocabulary.filter(item => 
     item.word.toLowerCase().includes(searchQuery.toLowerCase()) || 
     item.definition.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalMessages = sessions.reduce((sum, session) => sum + session.messages.length, 0);
+  const allMessages = sessions.flatMap(session => session.messages);
+  const userMessages = allMessages.filter(message => message.role === 'user');
+  const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordEvidence = vocabulary.map(item => {
+      const wordPattern = new RegExp(`\\b${escapeRegex(item.word.toLowerCase())}\\b`, 'i');
+      const sourceMessage = allMessages.find(message => wordPattern.test(message.text.toLowerCase()));
+      const exposureCount = allMessages.filter(message => wordPattern.test(message.text.toLowerCase())).length;
+      const activeUseCount = userMessages.filter(message => wordPattern.test(message.text.toLowerCase())).length;
+      const hasCoreFields = Boolean(item.word && item.definition && item.partOfSpeech);
+      const hasContext = Boolean(item.example || item.generatedExample || item.sourceContext || sourceMessage);
+      return {
+          item,
+          exposureCount,
+          activeUseCount,
+          sourceContext: item.sourceContext || sourceMessage?.text || '',
+          isComplete: hasCoreFields && hasContext
+      };
+  });
+  const completeCards = wordEvidence.filter(entry => entry.isComplete).length;
+  const contextualizedWords = wordEvidence.filter(entry => entry.exposureCount > 0 || entry.item.example).length;
+  const activelyUsedWords = wordEvidence.filter(entry => entry.activeUseCount > 0).length;
+  const observedExposureEvents = wordEvidence.reduce((sum, entry) => sum + entry.exposureCount, 0);
+  const activeUseEvents = wordEvidence.reduce((sum, entry) => sum + entry.activeUseCount, 0);
+  const enhancedCards = vocabulary.filter(item => item.enhancedAt || item.generatedExample || item.sourceContext || item.roots?.length || item.synonyms?.length).length;
+  const weakNodes = pendingWords.length + wordEvidence.filter(entry => !entry.isComplete).length;
+  const completionRate = vocabulary.length === 0 ? 0 : Math.round((completeCards / vocabulary.length) * 100);
+  const contextualizationRate = vocabulary.length === 0 ? 0 : Math.round((contextualizedWords / vocabulary.length) * 100);
+  const activeUseRate = vocabulary.length === 0 ? 0 : Math.round((activelyUsedWords / vocabulary.length) * 100);
+  const averageSessionDepth = sessions.length === 0 ? 0 : Math.round(totalMessages / sessions.length);
+  const missingContextWords = wordEvidence.filter(entry => !entry.isComplete).map(entry => entry.item).slice(0, 4);
+  const reinforcementNodes = [
+      ...pendingWords.slice(0, 4).map(word => ({ label: word, reason: '待查询释义' })),
+      ...missingContextWords.map(item => ({ label: item.word, reason: '待补充语境' }))
+  ].slice(0, 4);
+  const partOfSpeechCounts = vocabulary.reduce<Record<string, number>>((acc, item) => {
+      const key = item.partOfSpeech || 'unknown';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+  }, {});
+  const topCategories = Object.entries(partOfSpeechCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+  const latestReflection = reflectionEntries[0];
+  const averageReflectionScore = (key: 'cognitiveLoad' | 'anxiety' | 'confidence') => {
+      if (reflectionEntries.length === 0) return 0;
+      const average = reflectionEntries.reduce((sum, entry) => sum + entry[key], 0) / reflectionEntries.length;
+      return Number(average.toFixed(1));
+  };
+  const averageCognitiveLoad = averageReflectionScore('cognitiveLoad');
+  const averageAnxiety = averageReflectionScore('anxiety');
+  const averageConfidence = averageReflectionScore('confidence');
+  const formatReflectionDate = (timestamp: number) => new Date(timestamp).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+  });
+  const assetStats = [
+      { label: '词汇卡片', value: vocabulary.length, source: '存储记录', tone: 'text-indigo-700 bg-indigo-50' },
+      { label: '语境暴露', value: observedExposureEvents, source: '聊天文本命中', tone: 'text-sky-700 bg-sky-50' },
+      { label: '主动使用', value: activeUseEvents, source: '用户消息命中', tone: 'text-emerald-700 bg-emerald-50' },
+      { label: '深加工卡片', value: enhancedCards, source: '语境增强记录', tone: 'text-violet-700 bg-violet-50' },
+      { label: '反思记录', value: reflectionEntries.length, source: '学习者自评', tone: 'text-teal-700 bg-teal-50' }
+  ];
+  const measuredIndicators = [
+      { label: '卡片完整率', value: `${completionRate}%`, detail: `${completeCards}/${vocabulary.length}`, theory: '词汇知识: form-meaning-use' },
+      { label: '语境化率', value: `${contextualizationRate}%`, detail: `${contextualizedWords}/${vocabulary.length}`, theory: 'Nation: varied meetings' },
+      { label: '输出迁移率', value: `${activeUseRate}%`, detail: `${activelyUsedWords}/${vocabulary.length}`, theory: 'meaning-focused output' },
+      { label: '平均会话深度', value: averageSessionDepth, detail: `${totalMessages} 条消息`, theory: 'learning analytics trace' },
+      {
+          label: '平均认知负荷',
+          value: reflectionEntries.length ? `${averageCognitiveLoad}/5` : '待记录',
+          detail: `${reflectionEntries.length} 条自评`,
+          theory: 'SRL / cognitive load'
+      }
+  ];
+  const missingIndicators = [
+      { label: '主动回忆成功率', theory: 'retrieval practice', requirement: '需要测验答题日志' },
+      { label: '间隔复习逾期数', theory: 'spacing effect', requirement: '需要 nextReviewAt' }
+  ];
+  const enhancementRate = vocabulary.length === 0 ? 0 : Math.round((enhancedCards / vocabulary.length) * 100);
+  const cardsNeedingEnhancement = Math.max(vocabulary.length - enhancedCards, 0);
+
+  const findSourceContext = (word: string) => {
+      const wordPattern = new RegExp(`\\b${escapeRegex(word.toLowerCase())}\\b`, 'i');
+      const sourceMessage = allMessages.find(message => wordPattern.test(message.text.toLowerCase()));
+      if (!sourceMessage) return '';
+      return sourceMessage.text.length > 180 ? `${sourceMessage.text.slice(0, 180)}...` : sourceMessage.text;
+  };
+
+  const buildVocabularyEnhancement = (item: VocabularyItem): VocabularyItem => {
+      const lowerWord = item.word.toLowerCase();
+      const roots = item.roots?.length
+          ? item.roots
+          : MORPHEME_HINTS.filter(rule => rule.pattern.test(item.word)).map(rule => rule.hint);
+
+      return {
+          ...item,
+          synonyms: item.synonyms?.length ? item.synonyms : (LOCAL_SYNONYM_MAP[lowerWord] || []),
+          roots: roots.length > 0 ? roots : ['待词典确认词根/词缀'],
+          wordFamily: item.wordFamily?.length ? item.wordFamily : inferWordFamily(item.word, item.partOfSpeech),
+          generatedExample: item.generatedExample || item.example || buildGeneratedExample(item),
+          sourceContext: item.sourceContext || findSourceContext(item.word),
+          enhancedAt: Date.now(),
+          enhancementMethod: '本地规则匹配 + 历史语境检索'
+      };
+  };
+
+  const handleEnhanceAllCards = () => {
+      if (vocabulary.length === 0) return;
+      setVocabulary(prev => prev.map(item => buildVocabularyEnhancement(item)));
+  };
+
+  const handleEnhanceSingleCard = (id: string) => {
+      setVocabulary(prev => prev.map(item => item.id === id ? buildVocabularyEnhancement(item) : item));
+  };
+
+  const handleReflectionScoreChange = (field: 'cognitiveLoad' | 'anxiety' | 'confidence', value: number) => {
+      setReflectionForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveReflection = () => {
+      const now = Date.now();
+      const nextEntry: ReflectionEntry = {
+          id: `reflection-${now}`,
+          createdAt: now,
+          cognitiveLoad: reflectionForm.cognitiveLoad,
+          anxiety: reflectionForm.anxiety,
+          confidence: reflectionForm.confidence,
+          plan: reflectionForm.plan.trim()
+      };
+      setReflectionEntries(prev => [nextEntry, ...prev].slice(0, 50));
+      setReflectionForm(prev => ({ ...prev, plan: '' }));
+  };
+
+  const escapeYaml = (value: string) => value.replace(/"/g, '\\"');
+  const normalizeMarkdownLine = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+  const buildPkmMarkdown = () => {
+      const now = new Date();
+      const iso = now.toISOString();
+      const dateStr = iso.split('T')[0];
+      const formatList = (values?: string[]) => values?.length ? values.join('、') : '待补充';
+      const vocabCards = vocabulary.map(item => {
+          const evidence = wordEvidence.find(entry => entry.item.id === item.id);
+          return `### [[词汇/雅思/${item.word}]]
+
+- **词性**: ${item.partOfSpeech || 'unknown'}
+- **释义**: ${item.definition}
+- **原始例句**: ${item.example || '待补充'}
+- **自动例句**: ${item.generatedExample || '待增强生成'}
+- **同义表达**: ${formatList(item.synonyms)}
+- **词根/构词提示**: ${formatList(item.roots)}
+- **词族候选**: ${formatList(item.wordFamily)}
+- **来源语境**: ${item.sourceContext || evidence?.sourceContext || '暂无历史语境命中'}
+- **增强方式**: ${item.enhancementMethod || '待增强'}
+- **标签**: #词汇/雅思 #个人知识管理/语言学习
+- **复习状态**: ${evidence?.isComplete ? '已具备语境证据' : '待补充语境或复习记录'}
+`;
+      }).join('\n');
+
+      const recentSessions = sessions.slice(0, 8).map(session => (
+          `- [[学习会话/${session.title || '未命名会话'}]] - ${session.messages.length} 条消息`
+      )).join('\n');
+      const recentReflections = reflectionEntries.slice(0, 8).map(entry => (
+          `- ${formatReflectionDate(entry.createdAt)}: 认知负荷 ${entry.cognitiveLoad}/5，学习焦虑 ${entry.anxiety}/5，复习信心 ${entry.confidence}/5；下一步计划：${normalizeMarkdownLine(entry.plan) || '未填写'}`
+      )).join('\n');
+
+      return `---
+title: "LingoLeap 雅思个人知识库导出 ${dateStr}"
+created: "${iso}"
+type: "个人语言知识管理"
+target: "雅思备考"
+level: "${escapeYaml(String(settings.level))}"
+vocabulary_count: ${vocabulary.length}
+session_count: ${sessions.length}
+message_count: ${totalMessages}
+reflection_count: ${reflectionEntries.length}
+tags:
+  - 词汇/雅思
+  - 个人知识管理/语言学习
+  - 知识管理/SECI
+---
+
+# LingoLeap 雅思个人知识库
+
+## 知识资产看板
+
+| 指标 | 数值 | 说明 |
+| --- | ---: | --- |
+| 词汇卡片 | ${vocabulary.length} | 已外化保存的显性词汇节点 |
+| 学习会话 | ${sessions.length} | 已保存的学习场景 |
+| 消息痕迹 | ${totalMessages} | 可观测的学习过程数据 |
+| 语境暴露事件 | ${observedExposureEvents} | 目标词在历史对话中出现的次数 |
+| 主动使用事件 | ${activeUseEvents} | 目标词在学习者输出中出现的次数 |
+| 完整卡片 | ${completeCards} | 具备词形、释义、词性与语境证据的卡片 |
+| 深加工卡片 | ${enhancedCards} | 已补充同义词、构词或例句的卡片 |
+| 学习反思记录 | ${reflectionEntries.length} | 学习者手动记录的自评与下一步计划 |
+| 平均认知负荷 | ${reflectionEntries.length ? `${averageCognitiveLoad}/5` : '待记录'} | 来自学习反思滑杆记录 |
+| 平均学习焦虑 | ${reflectionEntries.length ? `${averageAnxiety}/5` : '待记录'} | 来自学习反思滑杆记录 |
+| 平均复习信心 | ${reflectionEntries.length ? `${averageConfidence}/5` : '待记录'} | 来自学习反思滑杆记录 |
+| 待强化节点 | ${weakNodes} | 缺少定义、语境或复习记录的项目 |
+
+## 指标口径说明
+
+- **卡片完整率**: 依据词汇知识的 form、meaning、use 框架，检查词形、释义、词性与语境证据。
+- **语境暴露**: 从历史对话日志中匹配目标词，不手动估计。
+- **主动使用**: 只统计目标词出现在学习者消息中的次数。
+- **学习反思/自评**: 认知负荷、学习焦虑和复习信心来自学习者手动记录，属于自我调节学习过程证据。
+- **待采集指标**: 主动回忆成功率、间隔复习逾期数等需要测验日志或复习日期，当前不做伪推断。
+
+## DIKW 映射
+
+- **Data 数据**: 原始单词、聊天片段、阅读文本。
+- **Information 信息**: 词性、释义、例句、来源语境。
+- **Knowledge 知识**: 带标签、双链、语境暴露和主动使用痕迹的词汇卡片。
+- **Wisdom 智慧**: 基于真实日志识别待强化节点，并规划复习。
+
+## SECI 映射
+
+- **Socialization 社会化**: 阅读与 AI 对话产生隐性语言输入。
+- **Externalization 外化**: 生词记录把“不认识”转为显性卡片。
+- **Combination 组合化**: 同义词、词根、例句、语境与 Markdown 双链形成知识网络。
+- **Internalization 内化**: 复习、测验和再次使用推动知识转为语言能力。
+
+## 近期学习会话
+
+${recentSessions || '- 暂无学习会话。'}
+
+## 学习反思/自评记录
+
+${recentReflections || '- 暂无自评记录。'}
+
+## 词汇知识卡片
+
+${vocabCards || '> 暂无词汇卡片。'}
+`;
+  };
+
+  const handleExportPkmMarkdown = () => {
+      const markdown = buildPkmMarkdown();
+      const dateStr = new Date().toISOString().split('T')[0];
+      const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(markdown);
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `LingoLeap-雅思个人知识库-${dateStr}.md`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+  };
 
   const handleAddWord = () => {
     if (newWord && newDef) {
@@ -487,6 +838,267 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
           )}
       </div>
 
+      {/* ACCORDION: KNOWLEDGE ASSETS */}
+      <div className="border-b border-slate-200 flex-shrink-0">
+          <button
+            onClick={() => setActiveSection(activeSection === 'assets' ? 'vocab' : 'assets')}
+            className={`w-full flex items-center justify-between p-4 font-bold text-sm ${activeSection === 'assets' ? 'bg-indigo-50 text-indigo-700' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+              <div className="flex items-center gap-2">
+                  <ListChecks size={18} /> 知识资产看板
+              </div>
+              {activeSection === 'assets' ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+
+          {activeSection === 'assets' && (
+              <div className="bg-slate-50 p-3 max-h-[58vh] overflow-y-auto animate-in slide-in-from-top-2 space-y-3">
+                  <div className="rounded-lg bg-white border border-indigo-100 p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                          <div>
+                              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wide">IELTS PKM Dashboard</p>
+                              <h3 className="text-sm font-semibold text-slate-800">个人语言知识资产</h3>
+                              <p className="mt-0.5 text-[10px] text-slate-400">基于本地词库、对话日志和用户输出计算</p>
+                          </div>
+                          <button
+                              onClick={handleExportPkmMarkdown}
+                              className="shrink-0 px-2.5 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold hover:bg-indigo-700 flex items-center gap-1"
+                              title="导出 Obsidian Markdown"
+                          >
+                              <Download size={13} /> PKM
+                          </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                          {assetStats.map(stat => (
+                              <div key={stat.label} className={`rounded-md p-2 ${stat.tone}`}>
+                                  <p className="text-[10px] opacity-80">{stat.label}</p>
+                                  <p className="text-lg font-bold leading-tight">{stat.value}</p>
+                                  <p className="text-[9px] opacity-70 mt-0.5">{stat.source}</p>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm">
+                      <p className="font-semibold text-slate-700">方法口径</p>
+                      <p className="mt-1 leading-relaxed">
+                          本看板统计可观测学习痕迹：词卡字段、历史对话命中、用户主动使用；心理负荷来自学习者自评。测验正确率和间隔复习仍需后续日志。
+                      </p>
+                  </div>
+
+                  <div className="rounded-lg border border-violet-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                          <div>
+                              <p className="text-xs font-semibold text-slate-700">语境自动化增强</p>
+                              <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                                  自动匹配同义表达、词根/构词提示、词族候选和 IELTS 场景例句。
+                              </p>
+                          </div>
+                          <button
+                              onClick={handleEnhanceAllCards}
+                              disabled={vocabulary.length === 0}
+                              className="shrink-0 px-2.5 py-1.5 bg-violet-600 text-white rounded text-xs font-semibold hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1"
+                              title="批量生成完整知识卡片"
+                          >
+                              <Sparkles size={13} /> 增强
+                          </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                          <div className="rounded bg-violet-50 p-2 text-violet-700">
+                              <p className="text-[10px] opacity-80">已深加工</p>
+                              <p className="text-base font-bold">{enhancedCards}</p>
+                          </div>
+                          <div className="rounded bg-slate-50 p-2 text-slate-700">
+                              <p className="text-[10px] opacity-80">待增强</p>
+                              <p className="text-base font-bold">{cardsNeedingEnhancement}</p>
+                          </div>
+                          <div className="rounded bg-emerald-50 p-2 text-emerald-700">
+                              <p className="text-[10px] opacity-80">增强率</p>
+                              <p className="text-base font-bold">{enhancementRate}%</p>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg border border-teal-200 bg-white p-3 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                          <div>
+                              <p className="text-xs font-semibold text-slate-700">学习反思/自评记录</p>
+                              <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                                  记录认知负荷、学习焦虑、复习信心和下一步计划。
+                              </p>
+                          </div>
+                          <button
+                              onClick={handleSaveReflection}
+                              className="shrink-0 px-2.5 py-1.5 bg-teal-600 text-white rounded text-xs font-semibold hover:bg-teal-700 flex items-center gap-1"
+                              title="保存本次学习反思"
+                          >
+                              <Check size={13} /> 保存
+                          </button>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                          {[
+                              { label: '认知负荷', field: 'cognitiveLoad' as const, low: '轻松', high: '吃力' },
+                              { label: '学习焦虑', field: 'anxiety' as const, low: '稳定', high: '紧张' },
+                              { label: '复习信心', field: 'confidence' as const, low: '不足', high: '很足' }
+                          ].map(item => (
+                              <label key={item.field} className="block rounded bg-slate-50 p-2">
+                                  <div className="flex items-center justify-between text-[11px]">
+                                      <span className="font-medium text-slate-600">{item.label}</span>
+                                      <span className="font-bold text-teal-700">{reflectionForm[item.field]}/5</span>
+                                  </div>
+                                  <input
+                                      type="range"
+                                      min="1"
+                                      max="5"
+                                      value={reflectionForm[item.field]}
+                                      onChange={(e) => handleReflectionScoreChange(item.field, Number(e.target.value))}
+                                      className="mt-1 w-full accent-teal-600"
+                                  />
+                                  <div className="flex justify-between text-[10px] text-slate-400">
+                                      <span>{item.low}</span>
+                                      <span>{item.high}</span>
+                                  </div>
+                              </label>
+                          ))}
+                          <textarea
+                              value={reflectionForm.plan}
+                              onChange={(e) => setReflectionForm(prev => ({ ...prev, plan: e.target.value }))}
+                              rows={2}
+                              className="w-full rounded border border-slate-200 p-2 text-xs text-slate-700 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-200"
+                              placeholder="下一步计划：例如明天复习高频同义替换，并用 3 个词写作文句子。"
+                          />
+                      </div>
+                      {latestReflection ? (
+                          <div className="mt-2 rounded bg-teal-50 p-2 text-[11px] text-teal-800">
+                              <div className="flex items-center justify-between gap-2">
+                                  <span className="font-semibold">最近记录</span>
+                                  <span className="text-teal-600">{formatReflectionDate(latestReflection.createdAt)}</span>
+                              </div>
+                              <p className="mt-1">
+                                  负荷 {latestReflection.cognitiveLoad}/5 · 焦虑 {latestReflection.anxiety}/5 · 信心 {latestReflection.confidence}/5
+                              </p>
+                              <p className="mt-1 text-teal-700">
+                                  均值：负荷 {averageCognitiveLoad}/5 · 焦虑 {averageAnxiety}/5 · 信心 {averageConfidence}/5
+                              </p>
+                              {latestReflection.plan && (
+                                  <p className="mt-1 text-teal-700">下一步：{latestReflection.plan}</p>
+                              )}
+                          </div>
+                      ) : (
+                          <div className="mt-2 rounded bg-slate-50 p-2 text-[11px] text-slate-500">
+                              暂无反思记录。保存后会进入看板统计和 PKM Markdown 导出。
+                          </div>
+                      )}
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-slate-700">已观测指标</p>
+                          <span className="text-[10px] text-slate-400">基于本地学习日志</span>
+                      </div>
+                      <div className="space-y-2">
+                          {measuredIndicators.map(indicator => (
+                              <div key={indicator.label} className="rounded-md bg-slate-50 p-2">
+                                  <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                          <p className="text-xs font-medium text-slate-700">{indicator.label}</p>
+                                          <p className="text-[10px] text-slate-400 truncate">{indicator.theory}</p>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                          <p className="text-sm font-bold text-slate-800">{indicator.value}</p>
+                                          <p className="text-[10px] text-slate-400">{indicator.detail}</p>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-amber-200 p-3 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-slate-700">待采集指标</p>
+                          <span className="text-[10px] text-amber-600">不做伪推断</span>
+                      </div>
+                      <div className="space-y-1.5">
+                          {missingIndicators.map(indicator => (
+                              <div key={indicator.label} className="rounded bg-amber-50 px-2 py-1.5 text-xs">
+                                  <div className="flex justify-between gap-2">
+                                      <span className="font-medium text-amber-800">{indicator.label}</span>
+                                      <span className="shrink-0 text-amber-600">待采集</span>
+                                  </div>
+                                  <p className="text-[10px] text-amber-700">{indicator.theory} · {indicator.requirement}</p>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <p className="text-xs font-semibold text-slate-700 mb-2">DIKW 知识流转</p>
+                      <div className="grid grid-cols-4 gap-1 text-center">
+                          {[
+                              ['Data', totalMessages],
+                              ['Info', completeCards],
+                              ['Know', contextualizedWords],
+                              ['Use', activeUseEvents]
+                          ].map(([label, value]) => (
+                              <div key={label} className="rounded bg-slate-50 p-1.5">
+                                  <p className="text-[10px] text-slate-400">{label}</p>
+                                  <p className="text-sm font-bold text-slate-700">{value}</p>
+                              </div>
+                          ))}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+                          <span>采集</span>
+                          <span>加工</span>
+                          <span>沉淀</span>
+                          <span>内化</span>
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <div className="flex justify-between items-center mb-2">
+                          <p className="text-xs font-semibold text-slate-700">待强化节点</p>
+                          <span className="text-[10px] text-slate-400">{weakNodes} 项</span>
+                      </div>
+                      <div className="space-y-1.5">
+                          {reinforcementNodes.length > 0 ? reinforcementNodes.map(node => (
+                              <div key={`${node.label}-${node.reason}`} className="flex items-center justify-between gap-2 rounded bg-rose-50 px-2 py-1.5 text-xs">
+                                  <span className="truncate font-medium text-rose-700">{node.label}</span>
+                                  <span className="shrink-0 text-rose-400">{node.reason}</span>
+                              </div>
+                          )) : (
+                              <div className="rounded bg-emerald-50 px-2 py-2 text-xs text-emerald-700">
+                                  当前没有明显薄弱节点
+                              </div>
+                          )}
+                      </div>
+                  </div>
+
+                  <div className="rounded-lg bg-white border border-slate-200 p-3 shadow-sm">
+                      <p className="text-xs font-semibold text-slate-700 mb-2">知识类别分布</p>
+                      <div className="space-y-2">
+                          {topCategories.length > 0 ? topCategories.map(([label, count]) => {
+                              const width = Math.round((count / Math.max(vocabulary.length, 1)) * 100);
+                              return (
+                                  <div key={label}>
+                                      <div className="flex justify-between text-[11px] mb-1">
+                                          <span className="text-slate-600 truncate">{label}</span>
+                                          <span className="text-slate-400">{count}</span>
+                                      </div>
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                          <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${width}%` }} />
+                                      </div>
+                                  </div>
+                              );
+                          }) : (
+                              <p className="text-xs text-slate-400">暂无词汇类别数据</p>
+                          )}
+                      </div>
+                  </div>
+              </div>
+          )}
+      </div>
+
       {/* ACCORDION: VOCABULARY */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
           <button 
@@ -542,7 +1154,7 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                     )}
 
                     <div className="flex gap-2">
-                            <button 
+                            <button
                             onClick={() => setPendingWords([])}
                             className="px-3 py-1.5 bg-white border border-slate-200 text-slate-500 rounded text-xs font-medium hover:text-red-600 hover:border-red-200"
                             disabled={isProcessing}
@@ -641,6 +1253,12 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-sm font-semibold text-slate-700">词汇列表</h3>
                             <div className="flex gap-1">
+                                <button onClick={handleExportPkmMarkdown} title="导出中文 Obsidian Markdown" className="px-2 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded flex items-center gap-1">
+                                    <Download size={14} /> PKM
+                                </button>
+                                <button onClick={handleEnhanceAllCards} title="语境自动化增强" className="px-2 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded flex items-center gap-1">
+                                    <Sparkles size={14} /> 增强
+                                </button>
                                 <button onClick={() => setIsImportMode(true)} title="AI 智能导入" className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded">
                                     <Upload size={16} />
                                 </button>
@@ -732,14 +1350,48 @@ const VocabularyPanel: React.FC<VocabularyPanelProps> = ({
                             <p className="font-bold text-slate-800">{item.word}</p>
                             <p className="text-xs text-slate-500 italic">{item.partOfSpeech}</p>
                         </div>
-                        <button 
-                            onClick={() => handleDelete(item.id)}
-                            className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
-                        >
-                            <Trash2 size={16} />
-                        </button>
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => handleEnhanceSingleCard(item.id)}
+                                className="text-slate-300 hover:text-violet-600 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
+                                title="增强知识卡片"
+                            >
+                                <Sparkles size={15} />
+                            </button>
+                            <button
+                                onClick={() => handleDelete(item.id)}
+                                className="text-slate-300 hover:text-red-500 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity p-1"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
                         </div>
                         <p className="text-sm text-slate-600 mt-1">{item.definition}</p>
+                        {(item.generatedExample || item.synonyms?.length || item.roots?.length || item.sourceContext) && (
+                            <div className="mt-2 rounded-md bg-white border border-violet-100 p-2 text-xs space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-violet-700">语境增强卡片</span>
+                                    <span className="text-[10px] text-slate-400">{item.enhancementMethod || '本地增强'}</span>
+                                </div>
+                                {item.synonyms?.length ? (
+                                    <p className="text-slate-600"><span className="text-slate-400">同义:</span> {item.synonyms.join('、')}</p>
+                                ) : (
+                                    <p className="text-slate-400">同义: 待词典确认</p>
+                                )}
+                                {item.roots?.length && (
+                                    <p className="text-slate-600"><span className="text-slate-400">构词:</span> {item.roots.slice(0, 2).join('；')}</p>
+                                )}
+                                {item.wordFamily?.length && (
+                                    <p className="text-slate-600"><span className="text-slate-400">词族:</span> {item.wordFamily.join('、')}</p>
+                                )}
+                                {item.generatedExample && (
+                                    <p className="text-slate-600"><span className="text-slate-400">例句:</span> {item.generatedExample}</p>
+                                )}
+                                {item.sourceContext && (
+                                    <p className="text-slate-500 max-h-10 overflow-hidden"><span className="text-slate-400">来源:</span> {item.sourceContext}</p>
+                                )}
+                            </div>
+                        )}
                     </div>
                     ))}
                     

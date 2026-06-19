@@ -1,137 +1,159 @@
-[🇨🇳 简体中文](README_zh.md) | [🇬🇧 English](README.md)
+[简体中文](README_zh.md) | [English](README.md)
 
-# LingoLeap - AI Language Tutor 🎓
+# LingoLeap - IELTS PKM Language Learning App
 
-**Live Demo:** [https://english-learner.vercel.app](https://english-learner-wx.vercel.app) 
-LingoLeap is an immersive, personalized language learning web application powered by **Google Gemini**. It combines real-time AI conversation, contextual vocabulary tracking, and gamified quizzes into a single, cross-device experience.
+**Live Demo:** [https://english-learner.vercel.app](https://english-learner-wx.vercel.app)
+
+LingoLeap is an AI language learning web app with IELTS-oriented **Personal Knowledge Management (PKM)** features. It helps learners collect vocabulary, preserve real contexts, enrich knowledge cards, track learning assets, and export reviewable notes instead of leaving study traces scattered across chats and files.
 
 Built with **React 19**, **TypeScript**, and **Tailwind CSS**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-1.0.13-green.svg)
+![Version](https://img.shields.io/badge/version-PKM%20edition-green.svg)
 
-## ✨ Key Features
+## What It Helps You Do
 
-### 🤖 Intelligent Chat & Roleplay
-- **Multi-Session Management**: Create, rename, switch, and batch delete conversation sessions.
-- **Powered by Gemini**: Supports `gemini-2.0-flash`, `gemini-3-flash-preview` and more.
-- **Custom Personas**: Set up any character (e.g., "Strict Victorian Teacher", "Casual Friend") via System Prompts.
-- **Long-Term Memory**: A "Memory Pad" that injects user details (goals, background) into every conversation context.
-- **TTS Support**: Browser-native Text-to-Speech to read messages aloud.
+- Chat with an AI tutor for English practice and roleplay.
+- Capture vocabulary from conversations, selected text, and imported articles.
+- Turn vocabulary into reusable knowledge cards with context and examples.
+- Track vocabulary assets, active usage, enrichment depth, and reflection records.
+- Export structured Markdown notes for Obsidian or any local knowledge base.
+- Sync learning data across devices through a private GitHub repository.
 
-### 📚 The "Worldbook" (Vocabulary Manager)
-- **Contextual Learning**: Words added to the Worldbook are highlighted in chat with AI-generated contextual translations.
-- **Smart Import**: Paste any article, and the AI will analyze, extract, and define difficult words in batches.
-- **Tap-to-Define**: 
-  - **Desktop**: Highlight any text to add it.
-  - **Mobile**: Tap words in chat to view definitions.
+## Key Features
 
-### ☁️ Cross-Device Cloud Sync (GitHub)
-- **No Backend Required**: Uses your own **GitHub Repository** as a private database.
-- **Full State Sync**: Syncs Chat History, Vocabulary, Memory, and Settings between PC and Mobile.
-- **Obsidian Integration**: Export learning session summaries (Markdown) directly to your Obsidian vault (hosted on GitHub).
+### Knowledge Asset Dashboard
 
-### 📝 AI Quiz Mode
-- **Generate Quizzes**: Create English comprehension tests from any text input or uploaded files (PDF/Images).
-- **Auto-Grading**: Instant feedback and explanations for answers.
+The vocabulary panel now includes a PKM dashboard that uses observable learning traces instead of arbitrary scores:
 
----
+- **Vocabulary cards**: stored knowledge nodes in the personal language knowledge base.
+- **Context exposures**: chat/article contexts where a word appears.
+- **Active uses**: learner-produced usage records.
+- **Deep-enriched cards**: cards with synonyms, roots, word family, IELTS examples, and source context.
+- **Reflection records**: self-assessment traces used for metacognitive monitoring.
 
-## 📱 Mobile Usage (Termux) - Lazy Setup Guide
+### Contextual Vocabulary Knowledge Cards
 
-You can run this application on your Android phone locally using Termux.
+The Worldbook vocabulary manager supports both language learning and knowledge-card construction:
 
-### 1. First-time Installation (All-in-one command)
-This script will automatically configure the environment, download the code, install dependencies, and run the app.
+- Add words through selected text, chat messages, or article import.
+- Preserve source context so a word is not separated from its usage situation.
+- Enrich cards with synonyms, root/morpheme hints, word-family information, and IELTS-style example sentences.
+- Export knowledge cards into Markdown for long-term storage and review.
+
+### Reflection / Self-Assessment Module
+
+A lightweight reflection module records:
+
+- cognitive load
+- learning anxiety
+- review confidence
+- next-step learning plan
+
+These records are stored locally and included in the PKM dashboard and Markdown export.
+
+### Obsidian-Compatible Markdown Export
+
+The export module generates a Chinese Markdown knowledge-base file such as:
+
+```text
+LingoLeap-雅思个人知识库-2026-06-19.md
+```
+
+The file includes YAML frontmatter, topic tags, double-link style references, vocabulary assets, enrichment notes, dashboard metrics, and learning reflections. It can be directly placed into an Obsidian vault.
+
+### AI Tutor Core
+
+- Multi-session AI chat and roleplay.
+- Custom personas through system prompts.
+- Memory pad for stable learner background and learning goals.
+- Browser-native TTS support.
+- AI quiz generation and auto-grading from text, PDF, or image input.
+
+### Cross-Device Cloud Sync
+
+- Uses a personal GitHub repository as a private data store.
+- Syncs chat history, vocabulary, memory, and settings across PC and mobile.
+- No custom backend is required.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18 or higher
+- A Google Gemini API key, or an OpenAI-compatible proxy endpoint
+- A GitHub account if you want cross-device sync
+
+### PC / Development
+
+```bash
+git clone https://github.com/Awayinch/english_learner.git
+cd english_learner
+npm install
+npm run dev
+```
+
+If npm is slow in mainland China, use:
+
+```bash
+npm install --registry=https://registry.npmmirror.com
+```
+
+Production build:
+
+```bash
+npm run build
+```
+
+## Mobile Usage (Termux)
+
+You can run this application on Android locally through Termux.
+
+First-time setup:
 
 ```bash
 pkg update -y && pkg upgrade -y && pkg install git nodejs -y && git clone https://github.com/Awayinch/english_learner.git && cd english_learner && chmod +x start.sh && ./start.sh
 ```
 
-*(If `git clone` fails, please ensure you have a proxy enabled or a GitHub mirror configured)*
-
-### 2. Quick Start Command (For subsequent launches)
-Next time you open Termux, just enter this single line:
+Subsequent launches:
 
 ```bash
 cd english_learner && ./start.sh
 ```
 
-**How it works:**
-*   `chmod +x start.sh`: Grants execution permission to the script.
-*   `./start.sh`: Automatically executes `npm install` (dependency check), `npm run build` (compilation), and `npx serve` (starts the server).
-*   **Port Isolation**: Forces port 3000 to avoid conflicts with other services like SillyTavern (8000).
+The `start.sh` script checks dependencies, builds the app, starts a local server, and uses port 3000 to avoid common conflicts.
 
----
+## Configuration
 
-## 🚀 Getting Started (PC/Dev)
+Open the settings panel in the app.
 
-### Prerequisites
-- Node.js (v18 or higher)
-- A Google Gemini API Key (Get it [here](https://aistudio.google.com/app/apikey))
-- A GitHub Account (for Sync functionality)
+### AI Connection
 
-### Installation
+- **API Key**: Google Gemini API key or compatible provider key.
+- **Base URL**: Optional proxy URL. The app supports OpenAI-compatible proxy endpoints.
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Awayinch/english_learner.git
-   cd english_learner
-   ```
+### GitHub Sync
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+1. Create a private GitHub repository, for example `english-learning-data`.
+2. Create a classic Personal Access Token with the `repo` scope.
+3. In LingoLeap settings, enter:
+   - GitHub token
+   - repository name, such as `yourname/english-learning-data`
+   - optional storage path, such as `backup/`
+4. Use **Backup Current Data** and **Fetch Backup & Preview** to move data between devices.
 
-3. **Run locally**
-   ```bash
-   npm run dev
-   ```
-
----
-
-## ⚙️ Configuration Guide
-
-Click the **Settings (Gear Icon)** in the app to configure connections.
-
-### 1. AI Connection
-- **API Key**: Enter your Google Gemini API Key.
-- **Base URL (Optional)**: If you are using a proxy (e.g., OneAPI) or cannot access Google directly, enter your proxy URL here. The app is compatible with OpenAI-format proxies.
-
-### 2. Setting Up Cloud Sync (Cross-Device)
-To sync data between your Phone and PC, LingoLeap uses GitHub's API.
-
-1. **Create a Private Repository** on GitHub (e.g., named `english-learning-data`).
-2. **Generate a Personal Access Token (Classic)**:
-   - Go to [GitHub Settings > Developer Settings > Tokens (Classic)](https://github.com/settings/tokens).
-   - Generate New Token.
-   - **Scopes**: Check `repo` (Full control of private repositories).
-   - Copy the token (starts with `ghp_...`).
-3. **In LingoLeap Settings**:
-   - **GitHub Token**: Paste your token.
-   - **Repo**: Enter `yourusername/english-learning-data`.
-   - **Path**: (Optional) Folder path, e.g., `backup/`.
-4. **Usage**:
-   - Click **"Backup Current Data"** to save your state.
-   - On a new device, click **"Fetch Backup & Preview"** to restore.
-
----
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: React 19, TypeScript
+- **Build tool**: Vite
 - **Styling**: Tailwind CSS
-- **AI SDK**: `@google/genai` (Official SDK)
+- **State**: Zustand and browser storage
+- **AI SDK**: `@google/genai`
 - **Icons**: Lucide React
-- **Audio**: Web Audio API & SpeechSynthesis API
+- **Audio**: Web Audio API and SpeechSynthesis API
 
----
+## License
 
-## 📄 License
+This project is open source under the [MIT License](LICENSE).
 
-This project is open source and available under the [MIT License](LICENSE).
-
----
-
-Created by [awayinch](https://github.com/Awayinch)
+Created by [awayinch](https://github.com/Awayinch).

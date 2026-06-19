@@ -5,6 +5,13 @@ export interface VocabularyItem {
   definition: string;
   partOfSpeech: string;
   example?: string;
+  synonyms?: string[];
+  roots?: string[];
+  wordFamily?: string[];
+  generatedExample?: string;
+  sourceContext?: string;
+  enhancedAt?: number;
+  enhancementMethod?: string;
 }
 
 export interface ChatMessage {
